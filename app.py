@@ -2,7 +2,7 @@
 """
 Tanager-1 Precision Agriculture Dashboard
 Mato Grosso, Brazil — May 2025
-Manuel Ramos · MIDA-OSIGA Panama
+Manuel Ramos
 Deploy: Render.com | gunicorn app:server
 """
 
@@ -97,7 +97,7 @@ app.layout = html.Div(style={"backgroundColor": C_DARK, "minHeight": "100vh",
         html.Div([
             html.H1("Tanager-1 · Precision Agriculture Dashboard",
                     style={"margin": 0, "fontSize": "20px", "color": C_ACCENT}),
-            html.P("Mato Grosso, Brazil · 2025-05-01 · 66 lotes · 426 bands · 30m · Manuel Ramos · MIDA-OSIGA Panama",
+            html.P("Mato Grosso, Brazil · 2025-05-01 · 66 lotes · 426 bands · 30m · Manuel Ramos",
                    style={"margin": 0, "fontSize": "12px", "color": "#8b949e"}),
         ])
     ]),
