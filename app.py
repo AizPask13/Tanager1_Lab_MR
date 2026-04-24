@@ -1,550 +1,913 @@
 # -*- coding: utf-8 -*-
 """
-Tanager-1 Precision Agriculture Dashboard
-Mato Grosso, Brazil — May 2025
-Manuel Ramos
-Deploy: Render.com | gunicorn app:server
+Public dashboard entrypoint for Render/GitHub.
+Uses only tabular/vector data so deployment does not depend on extra image assets.
 """
 
+from __future__ import annotations
+
 import json
-import numpy as np
-import pandas as pd
-import geopandas as gpd
-import plotly.express as px
-import plotly.graph_objects as go
-import dash
-from dash import dcc, html, Input, Output, dash_table
 from pathlib import Path
 
-# ── Rutas ─────────────────────────────────────────────────────────────
-DATA  = Path("data")
-IMG   = "assets/img"
+import dash
+import numpy as np
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from dash import Input, Output, dash_table, dcc, html
 
-# ── Cargar datos ──────────────────────────────────────────────────────
+
+ROOT = Path(__file__).resolve().parent
+DATA = ROOT / "data"
+BRIEF_MD = ROOT / "TECHNICAL_SCIENTIFIC_BRIEF.md"
+COMP_MD = ROOT / "competition_summary.md"
+
 with open(DATA / "lotes_dashboard.geojson", encoding="utf-8") as f:
-    geojson = json.load(f)
+    GEOJSON = json.load(f)
 
-df_idx    = pd.read_csv(DATA / "06_estadisticas_por_lote.csv")
-df_bio    = pd.read_csv(DATA / "07_bioquimica_por_lote.csv")
-df_spec   = pd.read_csv(DATA / "09_perfiles_todos_lotes.csv", index_col="id_lote")
-df_pca    = pd.read_csv(DATA / "09_pca_scores.csv")
-df_vip    = pd.read_csv(DATA / "10_vip_scores.csv")
-df_het    = pd.read_csv(DATA / "12_heterogeneidad_lotes.csv")
-df_reip   = pd.read_csv(DATA / "13_reip_por_lote.csv")
-df_clust  = pd.read_csv(DATA / "14_clustering_lotes.csv").rename(columns={"Unnamed: 0": "id_lote"})
+df_idx = pd.read_csv(DATA / "06_estadisticas_por_lote.csv")
+df_bio = pd.read_csv(DATA / "07_bioquimica_por_lote.csv")
+df_spec = pd.read_csv(DATA / "09_perfiles_todos_lotes.csv", index_col="id_lote")
+df_pca = pd.read_csv(DATA / "09_pca_scores.csv")
+df_vip = pd.read_csv(DATA / "10_vip_scores.csv")
+df_het = pd.read_csv(DATA / "12_heterogeneidad_lotes.csv")
+df_reip = pd.read_csv(DATA / "13_reip_por_lote.csv")
+df_clust = pd.read_csv(DATA / "14_clustering_lotes.csv").rename(columns={"Unnamed: 0": "id_lote"})
+df_unc = pd.read_csv(DATA / "15_incertidumbre_por_lote.csv")
+df_red = pd.read_csv(DATA / "16_rededge_metricas_por_lote.csv")
+df_anom = pd.read_csv(DATA / "17_anomalias_lotes.csv")
+df_sub = pd.read_csv(DATA / "18_subzonas_por_lote.csv")
+df_exp = pd.read_csv(DATA / "19_explicacion_lotes.csv")
 
 wl_nm = df_spec.columns.astype(float).values
-lotes = df_spec.index.tolist()
+lotes = sorted(df_spec.index.tolist())
 
-# Master dataframe por lote
-df_master = (df_idx[["id_lote","NDRE_mean","CIre_mean","PRI_mean","WBI_mean",
-                       "NDVI_mean","REIP_mean","NDWI_mean"]]
-             .merge(df_bio[["id_lote","Cab_est_ugcm2","N_foliar_rel","H2O_foliar_rel",
-                              "Efic_fotosint_rel","Biomasa_rel","Estres_car_rel"]], on="id_lote", how="left")
-             .merge(df_het[["id_lote","hetero_score","NDRE_cv","REIP_cv"]], on="id_lote", how="left")
-             .merge(df_reip[["id_lote","REIP_mean","REIP_range"]], on="id_lote",
-                    how="left", suffixes=("","_reip"))
-             .merge(df_pca[["id_lote","PC1","PC2","PC3"]], on="id_lote", how="left")
-             .merge(df_clust[["id_lote","cluster","cluster_name"]], on="id_lote", how="left"))
+brief_text = BRIEF_MD.read_text(encoding="utf-8") if BRIEF_MD.exists() else "Brief not found."
+comp_text = COMP_MD.read_text(encoding="utf-8") if COMP_MD.exists() else "Competition summary not found."
 
-# Variables disponibles para el mapa
+vip_columns = [c for c in df_vip.columns if c.startswith("VIP_")]
+
+df_master = (
+    df_idx[["id_lote", "NDRE_mean", "CIre_mean", "PRI_mean", "WBI_mean", "NDVI_mean", "REIP_mean", "NDWI_mean"]]
+    .merge(
+        df_bio[
+            [
+                "id_lote",
+                "Cab_est_ugcm2",
+                "N_foliar_rel",
+                "H2O_foliar_rel",
+                "Efic_fotosint_rel",
+                "Biomasa_rel",
+                "Estres_car_rel",
+            ]
+        ],
+        on="id_lote",
+        how="left",
+    )
+    .merge(df_het[["id_lote", "hetero_score", "NDRE_cv", "WBI_cv", "REIP_cv"]], on="id_lote", how="left")
+    .merge(df_reip[["id_lote", "REIP_range"]], on="id_lote", how="left")
+    .merge(df_pca[["id_lote", "PC1", "PC2", "PC3"]], on="id_lote", how="left")
+    .merge(df_clust[["id_lote", "cluster_name"]], on="id_lote", how="left")
+    .merge(
+        df_unc[
+            [
+                "id_lote",
+                "uncertainty_score",
+                "unc_visible_mean",
+                "unc_rededge_mean",
+                "unc_nir_mean",
+                "unc_swir_mean",
+                "su_rededge_proxy",
+                "su_swir_proxy",
+            ]
+        ],
+        on="id_lote",
+        how="left",
+    )
+    .merge(
+        df_red[["id_lote", "re_slope_max", "re_slope_wl_nm", "re_area_680_760", "re_contrast_750_680"]],
+        on="id_lote",
+        how="left",
+    )
+    .merge(df_anom[["id_lote", "anomaly_score", "anomaly_class", "anomaly_flags"]], on="id_lote", how="left")
+    .merge(
+        df_sub[
+            [
+                "id_lote",
+                "subzone_critica_pct",
+                "subzone_transicion_pct",
+                "subzone_alta_pct",
+                "score_mean",
+                "dominant_subzone",
+            ]
+        ],
+        on="id_lote",
+        how="left",
+    )
+    .merge(df_exp[["id_lote", "interpretation_short", "management_recommendation"]], on="id_lote", how="left")
+)
+
 MAP_VARS = {
-    "NDRE (Clorofila)":          "NDRE_mean",
-    "CIre (Clorofila)":          "CIre_mean",
-    "PRI (Efic. fotosintetica)": "PRI_mean",
-    "WBI (Estres hidrico)":      "WBI_mean",
-    "NDVI (Vigor)":              "NDVI_mean",
-    "REIP (N foliar, nm)":       "REIP_mean",
-    "Cab estimada (ug/cm2)":     "Cab_est_ugcm2",
-    "N foliar (relativo)":       "N_foliar_rel",
-    "H2O foliar (relativo)":     "H2O_foliar_rel",
-    "Biomasa (relativo)":        "Biomasa_rel",
-    "Heterogeneidad intra-lote": "hetero_score",
-    "PC1 (agua SWIR-1)":         "PC1",
-    "PC2 (N/lignina SWIR-2)":    "PC2",
+    "NDRE": "NDRE_mean",
+    "CIre": "CIre_mean",
+    "PRI": "PRI_mean",
+    "WBI": "WBI_mean",
+    "REIP (nm)": "REIP_mean",
+    "Cab estimada": "Cab_est_ugcm2",
+    "N foliar relativo": "N_foliar_rel",
+    "H2O foliar relativo": "H2O_foliar_rel",
+    "Biomasa relativa": "Biomasa_rel",
+    "Heterogeneidad": "hetero_score",
+    "Incertidumbre": "uncertainty_score",
+    "Pendiente red-edge": "re_slope_max",
+    "Subzona critica (%)": "subzone_critica_pct",
+    "Anomalia": "anomaly_score",
 }
 
-ZONE_COLORS = {"Zona A": "#2ecc71", "Zona B": "#e74c3c",
-               "Zona C": "#3498db", "Zona D": "#f39c12"}
+ZONE_COLORS = {
+    "Zona A": "#2a9d8f",
+    "Zona B": "#e76f51",
+    "Zona C": "#457b9d",
+    "Zona D": "#f4a261",
+}
 
-# ── Paleta ─────────────────────────────────────────────────────────────
-C_DARK   = "#0d1117"
-C_CARD   = "#161b22"
-C_BORDER = "#30363d"
-C_TEXT   = "#e6edf3"
-C_ACCENT = "#58a6ff"
-C_GREEN  = "#3fb950"
+C_DARK = "#0f1720"
+C_CARD = "#17212b"
+C_BORDER = "#2a3442"
+C_TEXT = "#ecf3fa"
+C_MUTED = "#9fb3c8"
+C_ACCENT = "#6ec1ff"
+C_WARN = "#e76f51"
+C_OK = "#2a9d8f"
 
-# ── App ────────────────────────────────────────────────────────────────
 app = dash.Dash(__name__, suppress_callback_exceptions=True)
 server = app.server
+app.title = "Tanager-1 Dashboard"
+
+
+def fmt(v: object, nd: int = 3) -> str:
+    if isinstance(v, str):
+        return v
+    if v is None or (isinstance(v, float) and not np.isfinite(v)):
+        return "-"
+    if isinstance(v, (float, np.floating)):
+        return f"{float(v):.{nd}f}"
+    return str(v)
+
+
+def quantile_rank(series: pd.Series, value: float) -> str:
+    q20, q80 = np.nanpercentile(series, [20, 80])
+    if value <= q20:
+        return "low"
+    if value >= q80:
+        return "high"
+    return "mid"
+
 
 card_style = {
     "backgroundColor": C_CARD,
     "border": f"1px solid {C_BORDER}",
-    "borderRadius": "8px",
+    "borderRadius": "10px",
     "padding": "16px",
     "marginBottom": "16px",
 }
 
-app.layout = html.Div(style={"backgroundColor": C_DARK, "minHeight": "100vh",
-                               "fontFamily": "monospace", "color": C_TEXT}, children=[
+table_style = {
+    "overflowX": "auto",
+}
 
-    # Header
-    html.Div(style={"backgroundColor": C_CARD, "borderBottom": f"1px solid {C_BORDER}",
-                    "padding": "16px 32px", "display": "flex",
-                    "alignItems": "center", "gap": "16px"}, children=[
-        html.Div([
-            html.H1("Tanager-1 · Precision Agriculture Dashboard",
-                    style={"margin": 0, "fontSize": "20px", "color": C_ACCENT}),
-            html.P("Mato Grosso, Brazil · 2025-05-01 · 66 lotes · 426 bands · 30m · Manuel Ramos",
-                   style={"margin": 0, "fontSize": "12px", "color": "#8b949e"}),
-        ])
-    ]),
+cell_style = {
+    "backgroundColor": C_CARD,
+    "color": C_TEXT,
+    "border": f"1px solid {C_BORDER}",
+    "fontSize": "12px",
+    "whiteSpace": "normal",
+    "height": "auto",
+}
 
-    # KPI row
-    html.Div(style={"display": "flex", "gap": "12px", "padding": "16px 32px",
-                    "flexWrap": "wrap"}, children=[
-        *[html.Div(style={**card_style, "flex": "1", "minWidth": "140px",
-                          "textAlign": "center", "marginBottom": 0}, children=[
-            html.P(label, style={"margin": 0, "fontSize": "11px", "color": "#8b949e"}),
-            html.H3(value, style={"margin": 0, "color": C_ACCENT, "fontSize": "22px"}),
-        ]) for label, value in [
-            ("Lotes analizados", "66"),
-            ("Bandas espectrales", "426"),
-            ("Resolución", "30 m"),
-            ("Variables bioquímicas", "6"),
-            ("Zonas de manejo", "2"),
-            ("R² PLSR (LOO-CV)", ">0.93"),
-        ]]
-    ]),
+header_style = {
+    "backgroundColor": C_DARK,
+    "color": C_ACCENT,
+    "fontWeight": "bold",
+    "border": f"1px solid {C_BORDER}",
+}
 
-    # Tabs
-    dcc.Tabs(id="tabs", value="tab-mapa", style={"padding": "0 32px"},
-             colors={"border": C_BORDER, "primary": C_ACCENT, "background": C_CARD},
-             children=[
+top_cab = df_bio.nlargest(5, "Cab_est_ugcm2")[["id_lote", "Cab_est_ugcm2"]]
+top_critical = df_sub.nlargest(5, "subzone_critica_pct")[["id_lote", "subzone_critica_pct"]]
+top_anomaly = df_anom.nlargest(8, "anomaly_score")[["id_lote", "anomaly_score", "anomaly_flags"]]
 
-        # ── TAB 1: Mapa interactivo ───────────────────────────────────
-        dcc.Tab(label="Mapa interactivo", value="tab-mapa",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "3", "minWidth": "400px"}, children=[
-                            html.Label("Variable:", style={"fontSize": "12px", "color": "#8b949e"}),
-                            dcc.Dropdown(
-                                id="map-var",
-                                options=[{"label": k, "value": v} for k, v in MAP_VARS.items()],
-                                value="NDRE_mean",
-                                style={"backgroundColor": C_CARD, "color": "#000", "marginBottom": "8px"}
-                            ),
-                            dcc.Graph(id="mapa-coropletico", style={"height": "520px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "280px"}, children=[
-                            html.H4("Lote seleccionado", style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Div(id="lote-info-panel",
-                                     style={"fontSize": "13px", "lineHeight": "2"}),
-                        ]),
-                    ]),
-                ])]),
 
-        # ── TAB 2: Perfil espectral ───────────────────────────────────
-        dcc.Tab(label="Perfil espectral", value="tab-espectro",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style=card_style, children=[
-                        html.Label("Seleccionar lotes (máx 5):",
-                                   style={"fontSize": "12px", "color": "#8b949e"}),
-                        dcc.Dropdown(
-                            id="spec-lotes",
-                            options=[{"label": l, "value": l} for l in sorted(lotes)],
-                            value=["A23", "A39", "A65"],
-                            multi=True,
-                            style={"backgroundColor": C_CARD, "color": "#000"}
-                        ),
-                        dcc.Graph(id="spectral-plot", style={"height": "500px"}),
-                    ]),
-                    html.Div(style=card_style, children=[
-                        html.H4("Imagen de análisis: diferencia espectral top vs bottom",
-                                style={"color": C_ACCENT, "marginTop": 0}),
-                        html.Img(src=f"/{IMG}/08_diferencia_espectral.png",
-                                 style={"width": "100%", "borderRadius": "4px"}),
-                    ]),
-                ])]),
+app.layout = html.Div(
+    style={"backgroundColor": C_DARK, "minHeight": "100vh", "fontFamily": "monospace", "color": C_TEXT},
+    children=[
+        html.Div(
+            style={"backgroundColor": C_CARD, "borderBottom": f"1px solid {C_BORDER}", "padding": "18px 28px"},
+            children=[
+                html.H1("Tanager-1 Physiology and Management Dashboard", style={"margin": 0, "fontSize": "22px", "color": C_ACCENT}),
+                html.P(
+                    "Mato Grosso, Brazil | 66 lots | 426 bands | red-edge + NIR + SWIR physiology inference",
+                    style={"margin": "6px 0 0 0", "color": C_MUTED},
+                ),
+            ],
+        ),
+        html.Div(
+            style={"display": "flex", "gap": "12px", "padding": "16px 28px", "flexWrap": "wrap"},
+            children=[
+                *[
+                    html.Div(
+                        style={**card_style, "flex": "1", "minWidth": "150px", "textAlign": "center", "marginBottom": 0},
+                        children=[
+                            html.P(label, style={"margin": 0, "fontSize": "11px", "color": C_MUTED}),
+                            html.H3(value, style={"margin": "6px 0 0 0", "color": C_ACCENT, "fontSize": "22px"}),
+                        ],
+                    )
+                    for label, value in [
+                        ("Lots", "66"),
+                        ("Spectral bands", "426"),
+                        ("Biochemical variables", "6"),
+                        ("QA layers", "uncertainty + anomalies"),
+                        ("Subzones", "critical / transition / high"),
+                        ("Focus", "competition-ready"),
+                    ]
+                ]
+            ],
+        ),
+        dcc.Tabs(
+            colors={"border": C_BORDER, "primary": C_ACCENT, "background": C_CARD},
+            children=[
+                dcc.Tab(
+                    label="Overview",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "3", "minWidth": "420px"},
+                                            children=[
+                                                html.Label("Mapped variable", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="map-var",
+                                                    options=[{"label": k, "value": v} for k, v in MAP_VARS.items()],
+                                                    value="NDRE_mean",
+                                                    style={"color": "#000"},
+                                                ),
+                                                dcc.Graph(id="map-fig", style={"height": "560px"}),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.H4("Lot inspector", style={"marginTop": 0, "color": C_ACCENT}),
+                                                html.Div(id="lot-panel"),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.H4("Highest chlorophyll", style={"marginTop": 0, "color": C_ACCENT}),
+                                                dash_table.DataTable(
+                                                    columns=[{"name": c, "id": c} for c in top_cab.columns],
+                                                    data=top_cab.round(2).to_dict("records"),
+                                                    style_table=table_style,
+                                                    style_cell=cell_style,
+                                                    style_header=header_style,
+                                                ),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.H4("Largest critical share", style={"marginTop": 0, "color": C_ACCENT}),
+                                                dash_table.DataTable(
+                                                    columns=[{"name": c, "id": c} for c in top_critical.columns],
+                                                    data=top_critical.round(2).to_dict("records"),
+                                                    style_table=table_style,
+                                                    style_cell=cell_style,
+                                                    style_header=header_style,
+                                                ),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.H4("Priority anomalies", style={"marginTop": 0, "color": C_ACCENT}),
+                                                dash_table.DataTable(
+                                                    columns=[{"name": c, "id": c} for c in top_anomaly.columns],
+                                                    data=top_anomaly.round(3).to_dict("records"),
+                                                    style_table=table_style,
+                                                    style_cell=cell_style,
+                                                    style_header=header_style,
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                dcc.Tab(
+                    label="Spectra",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "2", "minWidth": "420px"},
+                                            children=[
+                                                html.Label("Lots to compare", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="spec-lotes",
+                                                    options=[{"label": lid, "value": lid} for lid in lotes],
+                                                    value=["A23", "A56", "A65"],
+                                                    multi=True,
+                                                    style={"color": "#000"},
+                                                ),
+                                                dcc.Graph(id="spec-fig", style={"height": "540px"}),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.H4("Physiology guide", style={"marginTop": 0, "color": C_ACCENT}),
+                                                dcc.Markdown(
+                                                    """
+- `376-500 nm`: pigmentos accesorios y respuesta carotenoide.
+- `531-570 nm`: ventana asociada a `PRI` y eficiencia fotoquímica.
+- `680-750 nm`: red-edge, sensible a clorofila, nitrógeno y estructura foliar.
+- `750-1300 nm`: NIR dominado por dispersión del mesófilo y arquitectura del dosel.
+- `1300-2499 nm`: SWIR dominado por agua foliar y química estructural.
+- Las ventanas `1340-1460` y `1790-1970 nm` se excluyen por absorción atmosférica del agua.
+                                                    """,
+                                                    style={"color": C_TEXT},
+                                                ),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                dcc.Tab(
+                    label="Biochemistry",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "340px"},
+                                            children=[
+                                                html.Label("Lot", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="bio-lote",
+                                                    options=[{"label": lid, "value": lid} for lid in lotes],
+                                                    value="A23",
+                                                    style={"color": "#000"},
+                                                ),
+                                                dcc.Graph(id="bio-radar", style={"height": "430px"}),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "2", "minWidth": "460px"},
+                                            children=[
+                                                html.Label("Biochemical variable", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="bio-var",
+                                                    options=[
+                                                        {"label": "Cab estimada", "value": "Cab_est_ugcm2"},
+                                                        {"label": "N foliar relativo", "value": "N_foliar_rel"},
+                                                        {"label": "H2O foliar relativo", "value": "H2O_foliar_rel"},
+                                                        {"label": "Eficiencia fotosintetica", "value": "Efic_fotosint_rel"},
+                                                        {"label": "Biomasa relativa", "value": "Biomasa_rel"},
+                                                        {"label": "Estres carotenoide", "value": "Estres_car_rel"},
+                                                    ],
+                                                    value="Cab_est_ugcm2",
+                                                    style={"color": "#000"},
+                                                ),
+                                                dcc.Graph(id="bio-bar", style={"height": "430px"}),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                                html.Div(
+                                    style=card_style,
+                                    children=[
+                                        html.H4("Biochemical table", style={"marginTop": 0, "color": C_ACCENT}),
+                                        dash_table.DataTable(
+                                            columns=[{"name": c, "id": c} for c in df_bio.columns],
+                                            data=df_bio.round(3).to_dict("records"),
+                                            page_size=12,
+                                            sort_action="native",
+                                            filter_action="native",
+                                            style_table=table_style,
+                                            style_cell=cell_style,
+                                            style_header=header_style,
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                dcc.Tab(
+                    label="PCA and VIP",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "420px"},
+                                            children=[
+                                                html.Label("PCA color", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.RadioItems(
+                                                    id="pca-color",
+                                                    options=[
+                                                        {"label": "Cluster", "value": "cluster_name"},
+                                                        {"label": "Cab", "value": "Cab_est_ugcm2"},
+                                                        {"label": "NDRE", "value": "NDRE_mean"},
+                                                        {"label": "Anomaly", "value": "anomaly_score"},
+                                                    ],
+                                                    value="cluster_name",
+                                                    inline=True,
+                                                    labelStyle={"marginRight": "16px"},
+                                                ),
+                                                dcc.Graph(id="pca-fig", style={"height": "450px"}),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "420px"},
+                                            children=[
+                                                html.Label("VIP variable", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="vip-var",
+                                                    options=[{"label": c.replace("VIP_", ""), "value": c} for c in vip_columns],
+                                                    value=vip_columns[0],
+                                                    style={"color": "#000"},
+                                                ),
+                                                dcc.Graph(id="vip-fig", style={"height": "450px"}),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                dcc.Tab(
+                    label="Quality and Zoning",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(style={**card_style, "flex": "1", "minWidth": "420px"}, children=[dcc.Graph(id="unc-fig", style={"height": "420px"})]),
+                                        html.Div(style={**card_style, "flex": "1", "minWidth": "420px"}, children=[dcc.Graph(id="rededge-fig", style={"height": "420px"})]),
+                                    ],
+                                ),
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(style={**card_style, "flex": "1", "minWidth": "420px"}, children=[dcc.Graph(id="anom-fig", style={"height": "430px"})]),
+                                        html.Div(style={**card_style, "flex": "1", "minWidth": "420px"}, children=[dcc.Graph(id="subzone-fig", style={"height": "430px"})]),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+                dcc.Tab(
+                    label="Interpretation",
+                    children=[
+                        html.Div(
+                            style={"padding": "16px 28px"},
+                            children=[
+                                html.Div(
+                                    style={"display": "flex", "gap": "16px", "flexWrap": "wrap"},
+                                    children=[
+                                        html.Div(
+                                            style={**card_style, "flex": "1", "minWidth": "320px"},
+                                            children=[
+                                                html.Label("Lot", style={"fontSize": "12px", "color": C_MUTED}),
+                                                dcc.Dropdown(
+                                                    id="explain-lote",
+                                                    options=[{"label": lid, "value": lid} for lid in lotes],
+                                                    value="A23",
+                                                    style={"color": "#000"},
+                                                ),
+                                                html.Div(id="explain-panel", style={"marginTop": "14px"}),
+                                            ],
+                                        ),
+                                        html.Div(
+                                            style={**card_style, "flex": "2", "minWidth": "520px"},
+                                            children=[
+                                                html.H4("Technical scientific brief", style={"marginTop": 0, "color": C_ACCENT}),
+                                                dcc.Markdown(brief_text),
+                                                html.Hr(style={"borderColor": C_BORDER}),
+                                                html.H4("Competition summary", style={"color": C_ACCENT}),
+                                                dcc.Markdown(comp_text),
+                                            ],
+                                        ),
+                                    ],
+                                ),
+                            ],
+                        )
+                    ],
+                ),
+            ],
+        ),
+    ],
+)
 
-        # ── TAB 3: Bioquímica ─────────────────────────────────────────
-        dcc.Tab(label="Bioquímica por lote", value="tab-bio",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "320px"}, children=[
-                            html.Label("Lote:", style={"fontSize": "12px", "color": "#8b949e"}),
-                            dcc.Dropdown(
-                                id="bio-lote",
-                                options=[{"label": l, "value": l} for l in sorted(lotes)],
-                                value="A23",
-                                style={"backgroundColor": C_CARD, "color": "#000", "marginBottom": "8px"}
-                            ),
-                            dcc.Graph(id="bio-radar", style={"height": "420px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "2", "minWidth": "400px"}, children=[
-                            html.H4("Heatmap bioquímico — todos los lotes",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/07_heatmap_bioquimica.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                    ]),
-                    html.Div(style=card_style, children=[
-                        html.H4("Tabla completa bioquímica",
-                                style={"color": C_ACCENT, "marginTop": 0}),
-                        dash_table.DataTable(
-                            id="bio-table",
-                            columns=[{"name": c, "id": c} for c in
-                                     ["id_lote","Cab_est_ugcm2","N_foliar_rel",
-                                      "H2O_foliar_rel","Efic_fotosint_rel",
-                                      "Biomasa_rel","Estres_car_rel"]],
-                            data=df_bio.to_dict("records"),
-                            sort_action="native", filter_action="native",
-                            page_size=15,
-                            style_table={"overflowX": "auto"},
-                            style_cell={"backgroundColor": C_CARD, "color": C_TEXT,
-                                        "border": f"1px solid {C_BORDER}", "fontSize": "12px"},
-                            style_header={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                          "fontWeight": "bold"},
-                        ),
-                    ]),
-                ])]),
-
-        # ── TAB 4: PCA + Clustering ───────────────────────────────────
-        dcc.Tab(label="PCA / Zonas de manejo", value="tab-pca",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("Biplot PCA — PC1 vs PC2", style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Label("Color:", style={"fontSize": "12px", "color": "#8b949e"}),
-                            dcc.RadioItems(
-                                id="pca-color",
-                                options=[{"label": "Zona cluster", "value": "cluster_name"},
-                                         {"label": "NDRE", "value": "NDRE_mean"},
-                                         {"label": "Cab (µg/cm²)", "value": "Cab_est_ugcm2"}],
-                                value="cluster_name",
-                                inline=True,
-                                style={"fontSize": "12px", "marginBottom": "8px"},
-                                labelStyle={"marginRight": "16px"}
-                            ),
-                            dcc.Graph(id="pca-biplot", style={"height": "420px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("Mapa zonas de manejo (clustering)",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/14_fingerprint_clustering.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                    ]),
-                    html.Div(style=card_style, children=[
-                        html.H4("PC Loadings — importancia espectral",
-                                style={"color": C_ACCENT, "marginTop": 0}),
-                        html.Img(src=f"/{IMG}/09_pca_espectral.png",
-                                 style={"width": "100%", "borderRadius": "4px"}),
-                    ]),
-                ])]),
-
-        # ── TAB 5: PLSR + VIP ─────────────────────────────────────────
-        dcc.Tab(label="PLSR / VIP scores", value="tab-plsr",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("VIP scores por variable",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Label("Variable:", style={"fontSize": "12px", "color": "#8b949e"}),
-                            dcc.Dropdown(
-                                id="vip-var",
-                                options=[{"label": c.replace("VIP_",""), "value": c}
-                                         for c in df_vip.columns if c.startswith("VIP_")],
-                                value=[c for c in df_vip.columns if c.startswith("VIP_")][0],
-                                style={"backgroundColor": C_CARD, "color": "#000", "marginBottom": "8px"}
-                            ),
-                            dcc.Graph(id="vip-plot", style={"height": "420px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("PLSR — Observado vs Predicho (LOO-CV)",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/10_plsr_bioquimica.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                    ]),
-                ])]),
-
-        # ── TAB 6: Análisis espacial ──────────────────────────────────
-        dcc.Tab(label="Análisis espacial", value="tab-spatial",
-                style={"backgroundColor": C_CARD, "color": C_TEXT},
-                selected_style={"backgroundColor": C_DARK, "color": C_ACCENT,
-                                "borderTop": f"2px solid {C_ACCENT}"},
-                children=[html.Div(style={"padding": "16px 32px"}, children=[
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("Gradiente N foliar — REIP continuo 30m",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/13_reip_gradiente_N.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("Heterogeneidad intra-lote (CV NDRE 150m)",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/12_heterogeneidad_lotes.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                    ]),
-                    html.Div(style={"display": "flex", "gap": "16px", "flexWrap": "wrap"}, children=[
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("RGB + lotes + calidad",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/03_RGB_calidad_lotes.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                        html.Div(style={**card_style, "flex": "1", "minWidth": "360px"}, children=[
-                            html.H4("Mapa PLSR píxel a píxel",
-                                    style={"color": C_ACCENT, "marginTop": 0}),
-                            html.Img(src=f"/{IMG}/10_mapa_plsr_pixeles.png",
-                                     style={"width": "100%", "borderRadius": "4px"}),
-                        ]),
-                    ]),
-                ])]),
-    ]),
-])
-
-# ── Callbacks ──────────────────────────────────────────────────────────
 
 @app.callback(
-    Output("mapa-coropletico", "figure"),
-    Output("lote-info-panel", "children"),
+    Output("map-fig", "figure"),
+    Output("lot-panel", "children"),
     Input("map-var", "value"),
-    Input("mapa-coropletico", "clickData"),
+    Input("map-fig", "clickData"),
 )
-def update_map(var_col, click_data):
-    label = {v: k for k, v in MAP_VARS.items()}.get(var_col, var_col)
-    df_plot = df_master.copy()
-
+def update_map(var_col: str, click_data: dict | None):
+    reverse_scale = var_col in {"uncertainty_score", "anomaly_score", "subzone_critica_pct"}
     fig = px.choropleth_mapbox(
-        df_plot, geojson=geojson,
-        locations="id_lote", featureidkey="properties.id_lote",
-        color=var_col, color_continuous_scale="RdYlGn",
+        df_master,
+        geojson=GEOJSON,
+        locations="id_lote",
+        featureidkey="properties.id_lote",
+        color=var_col,
+        color_continuous_scale="RdYlGn_r" if reverse_scale else "RdYlGn",
         mapbox_style="carto-darkmatter",
-        center={"lat": -15.45, "lon": -55.02}, zoom=10,
+        center={"lat": -15.45, "lon": -55.02},
+        zoom=10,
+        opacity=0.78,
         hover_name="id_lote",
-        hover_data={"id_lote": False, var_col: ":.3f",
-                    "cluster_name": True, "hetero_score": ":.1f"},
-        labels={var_col: label, "cluster_name": "Zona", "hetero_score": "Hetero CV%"},
-        opacity=0.75,
+        hover_data={
+            "cluster_name": True,
+            "anomaly_class": True,
+            "subzone_critica_pct": ":.1f",
+            var_col: ":.3f",
+        },
     )
     fig.update_layout(
-        paper_bgcolor=C_CARD, plot_bgcolor=C_CARD,
-        font_color=C_TEXT, margin={"r": 0, "t": 0, "l": 0, "b": 0},
-        coloraxis_colorbar=dict(title=label[:18], tickfont=dict(color=C_TEXT),
-                                titlefont=dict(color=C_TEXT)),
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_CARD,
+        font_color=C_TEXT,
+        margin={"r": 0, "t": 0, "l": 0, "b": 0},
     )
 
-    # Info panel
-    info = html.P("Haz clic en un lote para ver detalles.",
-                  style={"color": "#8b949e"})
-    if click_data:
-        lid = click_data["points"][0].get("location")
-        row = df_master[df_master["id_lote"] == lid]
-        if not row.empty:
-            r = row.iloc[0]
-            info = html.Div([
-                html.H4(lid, style={"color": C_ACCENT, "marginTop": 0}),
-                html.P(f"Zona: {r.get('cluster_name','—')}", style={"margin": "2px 0"}),
-                html.Hr(style={"borderColor": C_BORDER}),
-                *[html.P(f"{lbl}: {r.get(col, np.nan):.3f}",
-                         style={"margin": "2px 0", "fontSize": "13px"})
-                  for lbl, col in [
-                      ("NDRE", "NDRE_mean"), ("REIP (nm)", "REIP_mean"),
-                      ("Cab (µg/cm²)", "Cab_est_ugcm2"), ("N foliar", "N_foliar_rel"),
-                      ("H₂O foliar", "H2O_foliar_rel"), ("Biomasa", "Biomasa_rel"),
-                      ("Heterogeneidad", "hetero_score"), ("PC1", "PC1"), ("PC2", "PC2"),
-                  ]],
-            ])
-    return fig, info
+    default_lot = "A23"
+    lot_id = default_lot
+    if click_data and click_data.get("points"):
+        lot_id = click_data["points"][0].get("location", default_lot)
+    row = df_master[df_master["id_lote"] == lot_id].iloc[0]
+
+    cab_rank = quantile_rank(df_master["Cab_est_ugcm2"], float(row["Cab_est_ugcm2"]))
+    h2o_rank = quantile_rank(df_master["H2O_foliar_rel"], float(row["H2O_foliar_rel"]))
+    unc_rank = quantile_rank(df_master["uncertainty_score"], float(row["uncertainty_score"]))
+
+    panel = html.Div(
+        children=[
+            html.H4(lot_id, style={"marginTop": 0, "color": C_ACCENT}),
+            html.P(f"Cluster: {fmt(row['cluster_name'])}", style={"margin": "3px 0"}),
+            html.P(f"Anomaly: {fmt(row['anomaly_class'])}", style={"margin": "3px 0"}),
+            html.P(f"Dominant subzone: {fmt(row['dominant_subzone'])}", style={"margin": "3px 0"}),
+            html.Hr(style={"borderColor": C_BORDER}),
+            html.P(f"NDRE: {fmt(row['NDRE_mean'])}", style={"margin": "3px 0"}),
+            html.P(f"REIP: {fmt(row['REIP_mean'])} nm", style={"margin": "3px 0"}),
+            html.P(f"Cab: {fmt(row['Cab_est_ugcm2'])} ({cab_rank})", style={"margin": "3px 0"}),
+            html.P(f"H2O relative: {fmt(row['H2O_foliar_rel'], 1)} ({h2o_rank})", style={"margin": "3px 0"}),
+            html.P(f"Uncertainty: {fmt(row['uncertainty_score'], 5)} ({unc_rank})", style={"margin": "3px 0"}),
+            html.P(f"Critical subzone: {fmt(row['subzone_critica_pct'], 1)} %", style={"margin": "3px 0"}),
+            html.Hr(style={"borderColor": C_BORDER}),
+            html.P("Interpretation", style={"margin": "6px 0", "color": C_ACCENT}),
+            html.P(fmt(row["interpretation_short"]), style={"whiteSpace": "pre-wrap", "lineHeight": "1.5"}),
+            html.P("Recommendation", style={"margin": "8px 0 0 0", "color": C_ACCENT}),
+            html.P(fmt(row["management_recommendation"]), style={"whiteSpace": "pre-wrap", "lineHeight": "1.5"}),
+        ]
+    )
+    return fig, panel
 
 
-@app.callback(
-    Output("spectral-plot", "figure"),
-    Input("spec-lotes", "value"),
-)
-def update_spectra(selected):
-    if not selected:
-        return go.Figure()
-    selected = selected[:5]
-    colors = px.colors.qualitative.Set2
-    WATER = [(1340, 1460), (1790, 1970)]
-
+@app.callback(Output("spec-fig", "figure"), Input("spec-lotes", "value"))
+def update_spectra(selected: list[str] | None):
+    selected = (selected or [])[:5]
     fig = go.Figure()
+    if not selected:
+        return fig
+
+    scene_mean = df_spec.mean(axis=0).values
+    fig.add_trace(
+        go.Scatter(
+            x=wl_nm,
+            y=scene_mean,
+            mode="lines",
+            name="Scene mean",
+            line=dict(color="#b0bec5", width=2, dash="dash"),
+        )
+    )
+    colors = px.colors.qualitative.Set2
     for i, lid in enumerate(selected):
         if lid not in df_spec.index:
             continue
-        y = df_spec.loc[lid].values
-        fig.add_trace(go.Scatter(
-            x=wl_nm, y=y, mode="lines", name=lid,
-            line=dict(color=colors[i % len(colors)], width=2),
-        ))
-    for lo, hi in WATER:
-        fig.add_vrect(x0=lo, x1=hi, fillcolor="#1f6aa5", opacity=0.15,
-                      line_width=0, annotation_text="H₂O", annotation_position="top left",
-                      annotation_font_size=9, annotation_font_color="#8b949e")
+        fig.add_trace(
+            go.Scatter(
+                x=wl_nm,
+                y=df_spec.loc[lid].values,
+                mode="lines",
+                name=lid,
+                line=dict(color=colors[i % len(colors)], width=2.6),
+            )
+        )
 
-    regions = [(376,500,"Blue"),(500,680,"Green"),(680,750,"Red-Edge"),
-               (750,1300,"NIR"),(1300,1800,"SWIR-1"),(1800,2499,"SWIR-2")]
-    region_colors = ["#4488CC","#44AA44","#FF7700","#888888","#CC8844","#994422"]
-    for (xlo, xhi, lbl), col in zip(regions, region_colors):
-        fig.add_vrect(x0=xlo, x1=xhi, fillcolor=col, opacity=0.04, line_width=0)
-        fig.add_annotation(x=(xlo+xhi)/2, y=1.02, xref="x", yref="paper",
-                           text=lbl, showarrow=False, font=dict(size=9, color=col))
+    for lo, hi in [(1340, 1460), (1790, 1970)]:
+        fig.add_vrect(x0=lo, x1=hi, fillcolor="#1d3557", opacity=0.18, line_width=0)
+    for lo, hi, col, text in [
+        (376, 500, "#457b9d", "Blue"),
+        (500, 680, "#2a9d8f", "Visible"),
+        (680, 750, "#e76f51", "Red-edge"),
+        (750, 1300, "#adb5bd", "NIR"),
+        (1300, 1800, "#f4a261", "SWIR-1"),
+        (1800, 2499, "#9c6644", "SWIR-2"),
+    ]:
+        fig.add_vrect(x0=lo, x1=hi, fillcolor=col, opacity=0.05, line_width=0)
+        fig.add_annotation(x=(lo + hi) / 2, y=1.02, xref="x", yref="paper", text=text, showarrow=False, font=dict(size=9, color=col))
 
     fig.update_layout(
-        paper_bgcolor=C_CARD, plot_bgcolor=C_DARK, font_color=C_TEXT,
-        xaxis_title="Longitud de onda (nm)", yaxis_title="Reflectancia superficial",
-        xaxis=dict(range=[376, 2499], gridcolor=C_BORDER),
-        yaxis=dict(gridcolor=C_BORDER),
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Wavelength (nm)", range=[376, 2499], gridcolor=C_BORDER),
+        yaxis=dict(title="Surface reflectance", gridcolor=C_BORDER),
         legend=dict(bgcolor=C_CARD, bordercolor=C_BORDER),
-        title="Perfil espectral completo — 426 bandas (Tanager-1)",
-        margin=dict(t=60, b=40),
+        margin=dict(t=40, b=40),
+        title="Spectral signatures and physiology-sensitive regions",
     )
     return fig
 
 
-@app.callback(
-    Output("bio-radar", "figure"),
-    Input("bio-lote", "value"),
-)
-def update_radar(lid):
+@app.callback(Output("bio-radar", "figure"), Input("bio-lote", "value"))
+def update_radar(lid: str):
     row = df_bio[df_bio["id_lote"] == lid]
     if row.empty:
         return go.Figure()
-    r = row.iloc[0]
-    cats = ["Clorofila", "N foliar", "H₂O foliar", "Efic. fotosin.", "Biomasa", "Estrés car."]
-    cols = ["Cab_est_ugcm2","N_foliar_rel","H2O_foliar_rel",
-            "Efic_fotosint_rel","Biomasa_rel","Estres_car_rel"]
-
-    # Normalize to 0-100 scale
-    all_vals = df_bio[cols].values
+    cols = [
+        "Cab_est_ugcm2",
+        "N_foliar_rel",
+        "H2O_foliar_rel",
+        "Efic_fotosint_rel",
+        "Biomasa_rel",
+        "Estres_car_rel",
+    ]
+    labels = ["Chlorophyll", "N", "Water", "Efficiency", "Biomass", "Carotenoid stress"]
+    all_vals = df_bio[cols].values.astype(float)
     mn = np.nanmin(all_vals, axis=0)
     mx = np.nanmax(all_vals, axis=0)
-    vals = [(float(r[c]) - mn[i]) / (mx[i] - mn[i]) * 100
-            if mx[i] > mn[i] else 0 for i, c in enumerate(cols)]
-    vals_closed = vals + [vals[0]]
-    cats_closed = cats + [cats[0]]
+    vals = []
+    row0 = row.iloc[0]
+    for i, c in enumerate(cols):
+        vals.append((float(row0[c]) - mn[i]) / (mx[i] - mn[i]) * 100 if mx[i] > mn[i] else 0)
+    vals.append(vals[0])
+    labels_closed = labels + [labels[0]]
+
+    mean_vals = []
+    for i, c in enumerate(cols):
+        mean_vals.append((float(np.nanmean(df_bio[c])) - mn[i]) / (mx[i] - mn[i]) * 100 if mx[i] > mn[i] else 0)
+    mean_vals.append(mean_vals[0])
 
     fig = go.Figure()
-    fig.add_trace(go.Scatterpolar(
-        r=vals_closed, theta=cats_closed, fill="toself",
-        name=lid, line_color=C_ACCENT, fillcolor=C_ACCENT,
-        opacity=0.3,
-    ))
-    # Scene mean
-    scene_mean = [(np.nanmean(df_bio[c]) - mn[i]) / (mx[i] - mn[i]) * 100
-                  if mx[i] > mn[i] else 0 for i, c in enumerate(cols)]
-    scene_closed = scene_mean + [scene_mean[0]]
-    fig.add_trace(go.Scatterpolar(
-        r=scene_closed, theta=cats_closed, fill="toself",
-        name="Media escena", line_color="#8b949e", fillcolor="#8b949e",
-        opacity=0.15, line_dash="dash",
-    ))
+    fig.add_trace(go.Scatterpolar(r=mean_vals, theta=labels_closed, fill="toself", name="Scene mean", opacity=0.14, line=dict(color="#94a3b8", dash="dash")))
+    fig.add_trace(go.Scatterpolar(r=vals, theta=labels_closed, fill="toself", name=lid, opacity=0.35, line=dict(color=C_ACCENT, width=3)))
     fig.update_layout(
+        paper_bgcolor=C_CARD,
+        font_color=C_TEXT,
         polar=dict(
             bgcolor=C_DARK,
-            radialaxis=dict(visible=True, range=[0, 100], gridcolor=C_BORDER,
-                            tickfont=dict(color=C_TEXT, size=9)),
+            radialaxis=dict(range=[0, 100], gridcolor=C_BORDER, tickfont=dict(color=C_TEXT)),
             angularaxis=dict(gridcolor=C_BORDER, tickfont=dict(color=C_TEXT)),
         ),
-        paper_bgcolor=C_CARD, font_color=C_TEXT,
+        title=f"Biochemical fingerprint: {lid}",
         legend=dict(bgcolor=C_CARD),
-        title=f"Perfil bioquímico — {lid}",
-        margin=dict(t=60, b=20),
     )
     return fig
 
 
-@app.callback(
-    Output("pca-biplot", "figure"),
-    Input("pca-color", "value"),
-)
-def update_pca(color_col):
-    df_plot = df_master.copy()
-    is_cat = color_col == "cluster_name"
+@app.callback(Output("bio-bar", "figure"), Input("bio-var", "value"))
+def update_bio_bar(col: str):
+    top = df_bio.sort_values(col, ascending=False)
+    fig = px.bar(top, x="id_lote", y=col, color=col, color_continuous_scale="Viridis")
+    fig.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Lot", tickangle=-45, gridcolor=C_BORDER),
+        yaxis=dict(title=col, gridcolor=C_BORDER),
+        coloraxis_colorbar=dict(title=col),
+        margin=dict(t=40, b=80),
+        title=f"Lot ranking: {col}",
+    )
+    return fig
 
-    if is_cat:
+
+@app.callback(Output("pca-fig", "figure"), Input("pca-color", "value"))
+def update_pca(color_col: str):
+    if color_col == "cluster_name":
         fig = px.scatter(
-            df_plot, x="PC1", y="PC2", text="id_lote",
+            df_master,
+            x="PC1",
+            y="PC2",
+            text="id_lote",
             color="cluster_name",
             color_discrete_map=ZONE_COLORS,
-            hover_data=["id_lote","NDRE_mean","Cab_est_ugcm2","hetero_score"],
-            title="Biplot PCA — PC1 (agua SWIR-1) vs PC2 (N/lignina SWIR-2)",
+            hover_data=["Cab_est_ugcm2", "hetero_score", "anomaly_score"],
         )
     else:
         fig = px.scatter(
-            df_plot, x="PC1", y="PC2", text="id_lote",
-            color=color_col, color_continuous_scale="RdYlGn",
-            hover_data=["id_lote","cluster_name","hetero_score"],
-            title="Biplot PCA — PC1 vs PC2",
+            df_master,
+            x="PC1",
+            y="PC2",
+            text="id_lote",
+            color=color_col,
+            color_continuous_scale="RdYlGn",
+            hover_data=["cluster_name", "hetero_score", "anomaly_score"],
         )
     fig.update_traces(textposition="top center", textfont_size=8, marker_size=10)
     fig.add_hline(y=0, line_dash="dash", line_color=C_BORDER)
     fig.add_vline(x=0, line_dash="dash", line_color=C_BORDER)
     fig.update_layout(
-        paper_bgcolor=C_CARD, plot_bgcolor=C_DARK, font_color=C_TEXT,
-        xaxis=dict(gridcolor=C_BORDER, title="PC1 — agua foliar (64.2%)"),
-        yaxis=dict(gridcolor=C_BORDER, title="PC2 — N/lignina SWIR-2 (23.8%)"),
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="PC1", gridcolor=C_BORDER),
+        yaxis=dict(title="PC2", gridcolor=C_BORDER),
         legend=dict(bgcolor=C_CARD, bordercolor=C_BORDER),
-        margin=dict(t=60, b=40),
+        margin=dict(t=40, b=30),
+        title="PCA lot space",
+    )
+    return fig
+
+
+@app.callback(Output("vip-fig", "figure"), Input("vip-var", "value"))
+def update_vip(col: str):
+    wl = df_vip["wavelength_nm"].values
+    vip = df_vip[col].values
+    colors = np.where(vip >= 1.0, C_WARN, "#457b9d")
+
+    fig = go.Figure()
+    fig.add_trace(go.Bar(x=wl, y=vip, marker_color=colors, width=5))
+    fig.add_hline(y=1.0, line_dash="dash", line_color="#ffffff")
+    for lo, hi in [(1340, 1460), (1790, 1970)]:
+        fig.add_vrect(x0=lo, x1=hi, fillcolor="#1d3557", opacity=0.18, line_width=0)
+    for idx in np.argsort(vip)[-5:][::-1]:
+        fig.add_annotation(x=wl[idx], y=vip[idx], text=f"{wl[idx]:.0f}", showarrow=True, arrowhead=1, arrowcolor=C_WARN)
+    fig.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Wavelength (nm)", range=[376, 2499], gridcolor=C_BORDER),
+        yaxis=dict(title="VIP score", gridcolor=C_BORDER),
+        margin=dict(t=40, b=40),
+        title=f"VIP profile: {col.replace('VIP_', '')}",
     )
     return fig
 
 
 @app.callback(
-    Output("vip-plot", "figure"),
-    Input("vip-var", "value"),
+    Output("unc-fig", "figure"),
+    Output("rededge-fig", "figure"),
+    Output("anom-fig", "figure"),
+    Output("subzone-fig", "figure"),
+    Input("map-var", "value"),
 )
-def update_vip(col):
-    vip = df_vip[col].values
-    wl  = df_vip["wavelength_nm"].values
-    colors = np.where(vip >= 1.0, "#e74c3c", "#3498db")
-    WATER = [(1340, 1460), (1790, 1970)]
-
-    fig = go.Figure()
-    fig.add_trace(go.Bar(x=wl, y=vip, marker_color=colors, width=5, name="VIP"))
-    fig.add_hline(y=1.0, line_dash="dash", line_color="white",
-                  annotation_text="VIP=1.0 (umbral)", annotation_font_color=C_TEXT)
-    for lo, hi in WATER:
-        fig.add_vrect(x0=lo, x1=hi, fillcolor="#1f6aa5", opacity=0.2, line_width=0)
-
-    # Anotar top 5
-    top5 = np.argsort(vip)[-5:][::-1]
-    for idx in top5:
-        fig.add_annotation(x=wl[idx], y=vip[idx], text=f"{wl[idx]:.0f}nm",
-                           showarrow=True, arrowhead=2, arrowcolor="#e74c3c",
-                           font=dict(size=9, color="#e74c3c"), yshift=5)
-
-    fig.update_layout(
-        paper_bgcolor=C_CARD, plot_bgcolor=C_DARK, font_color=C_TEXT,
-        xaxis=dict(title="Longitud de onda (nm)", range=[376, 2499], gridcolor=C_BORDER),
-        yaxis=dict(title="VIP score", gridcolor=C_BORDER),
-        title=f"VIP scores — {col.replace('VIP_','')} | rojo=VIP>1 (importante)",
-        margin=dict(t=60, b=40),
-        showlegend=False,
+def update_quality_figs(_):
+    fig_unc = px.scatter(
+        df_master,
+        x="unc_rededge_mean",
+        y="unc_swir_mean",
+        size="subzone_critica_pct",
+        color="anomaly_score",
+        hover_name="id_lote",
+        color_continuous_scale="Turbo",
     )
-    return fig
+    fig_unc.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Red-edge uncertainty", gridcolor=C_BORDER),
+        yaxis=dict(title="SWIR uncertainty", gridcolor=C_BORDER),
+        margin=dict(t=40, b=30),
+        title="Uncertainty space",
+    )
+
+    fig_red = px.scatter(
+        df_master,
+        x="re_slope_max",
+        y="Cab_est_ugcm2",
+        size="H2O_foliar_rel",
+        color="hetero_score",
+        hover_name="id_lote",
+        color_continuous_scale="Viridis",
+    )
+    fig_red.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Max red-edge slope", gridcolor=C_BORDER),
+        yaxis=dict(title="Estimated chlorophyll", gridcolor=C_BORDER),
+        margin=dict(t=40, b=30),
+        title="Red-edge structure vs chlorophyll",
+    )
+
+    top_anom_local = df_master.sort_values("anomaly_score", ascending=False).head(12)
+    fig_anom = px.bar(
+        top_anom_local,
+        x="id_lote",
+        y="anomaly_score",
+        color="anomaly_class",
+        hover_data=["anomaly_flags", "subzone_critica_pct"],
+        color_discrete_map={"ALTA": C_WARN, "MEDIA": "#f4a261", "NORMAL": C_OK},
+    )
+    fig_anom.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Lot", tickangle=-45, gridcolor=C_BORDER),
+        yaxis=dict(title="Anomaly score", gridcolor=C_BORDER),
+        margin=dict(t=40, b=80),
+        title="Priority anomaly ranking",
+    )
+
+    stacked = df_sub.melt(
+        id_vars="id_lote",
+        value_vars=["subzone_critica_pct", "subzone_transicion_pct", "subzone_alta_pct"],
+        var_name="subzone",
+        value_name="pct",
+    )
+    sub_labels = {
+        "subzone_critica_pct": "Critica",
+        "subzone_transicion_pct": "Transicion",
+        "subzone_alta_pct": "Alta",
+    }
+    stacked["subzone"] = stacked["subzone"].map(sub_labels)
+    fig_sub = px.bar(
+        stacked,
+        x="id_lote",
+        y="pct",
+        color="subzone",
+        barmode="stack",
+        color_discrete_map={"Critica": C_WARN, "Transicion": "#f4a261", "Alta": C_OK},
+    )
+    fig_sub.update_layout(
+        paper_bgcolor=C_CARD,
+        plot_bgcolor=C_DARK,
+        font_color=C_TEXT,
+        xaxis=dict(title="Lot", tickangle=-45, gridcolor=C_BORDER),
+        yaxis=dict(title="Subzone share (%)", gridcolor=C_BORDER),
+        margin=dict(t=40, b=80),
+        title="Intra-lot management zoning",
+    )
+    return fig_unc, fig_red, fig_anom, fig_sub
+
+
+@app.callback(Output("explain-panel", "children"), Input("explain-lote", "value"))
+def update_explain(lid: str):
+    row = df_master[df_master["id_lote"] == lid]
+    if row.empty:
+        return html.P("Lot not found.")
+    r = row.iloc[0]
+    return html.Div(
+        children=[
+            html.H4(lid, style={"marginTop": 0, "color": C_ACCENT}),
+            html.P(f"Diagnosis: {fmt(r['anomaly_class'])}", style={"margin": "4px 0"}),
+            html.P(f"Flags: {fmt(r['anomaly_flags'])}", style={"margin": "4px 0"}),
+            html.P(f"Critical subzone: {fmt(r['subzone_critica_pct'], 1)} %", style={"margin": "4px 0"}),
+            html.P(f"Red-edge slope: {fmt(r['re_slope_max'], 4)}", style={"margin": "4px 0"}),
+            html.P(f"REIP range: {fmt(r['REIP_range'], 2)} nm", style={"margin": "4px 0"}),
+            html.P(f"Uncertainty: {fmt(r['uncertainty_score'], 5)}", style={"margin": "4px 0"}),
+            html.Hr(style={"borderColor": C_BORDER}),
+            html.P("Interpretation", style={"margin": "6px 0", "color": C_ACCENT}),
+            html.P(fmt(r["interpretation_short"]), style={"whiteSpace": "pre-wrap", "lineHeight": "1.6"}),
+            html.P("Recommendation", style={"margin": "6px 0", "color": C_ACCENT}),
+            html.P(fmt(r["management_recommendation"]), style={"whiteSpace": "pre-wrap", "lineHeight": "1.6"}),
+        ]
+    )
 
 
 if __name__ == "__main__":
