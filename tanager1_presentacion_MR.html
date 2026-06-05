@@ -1,0 +1,1795 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Tanager-1 · Análisis Hiperespectral de Cultivos · Manuel Ramos</title>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --accent:   #58a6ff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --orange:   #d29922;
+    --purple:   #bc8cff;
+    --teal:     #39d353;
+    --font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', monospace;
+    --font-sans: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  }
+  html { scroll-behavior: smooth; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.7;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  img { max-width: 100%; border-radius: 6px; display: block; }
+  code {
+    font-family: var(--font-mono);
+    background: #1c2128;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 6px;
+    font-size: 13px;
+    color: var(--teal);
+  }
+  pre {
+    background: #1c2128;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--teal);
+    line-height: 1.6;
+  }
+
+  /* ── Layout ────────────────────────────────────────────────── */
+  .container { max-width: 1100px; margin: 0 auto; padding: 0 32px; }
+  section { padding: 72px 0; border-bottom: 1px solid var(--border); }
+  section:last-child { border-bottom: none; }
+
+  /* ── Navigation ────────────────────────────────────────────── */
+  nav {
+    position: sticky; top: 0; z-index: 100;
+    background: rgba(13,17,23,0.92);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 32px;
+    display: flex; align-items: center; gap: 24px; flex-wrap: wrap;
+  }
+  nav .brand { color: var(--accent); font-weight: 700; font-size: 14px; white-space: nowrap; }
+  nav a { color: var(--muted); font-size: 12px; }
+  nav a:hover { color: var(--text); text-decoration: none; }
+
+  /* ── Cover ─────────────────────────────────────────────────── */
+  #cover {
+    min-height: 100vh;
+    display: flex; flex-direction: column; justify-content: center;
+    padding: 80px 0;
+    position: relative;
+    overflow: hidden;
+    border-bottom: 1px solid var(--border);
+  }
+  #cover::before {
+    content: "";
+    position: absolute; inset: 0;
+    background:
+      radial-gradient(ellipse 80% 60% at 20% 50%, rgba(88,166,255,0.06) 0%, transparent 70%),
+      radial-gradient(ellipse 60% 40% at 80% 30%, rgba(63,185,80,0.05) 0%, transparent 60%);
+    pointer-events: none;
+  }
+  .cover-tag {
+    display: inline-block;
+    background: rgba(88,166,255,0.12);
+    border: 1px solid rgba(88,166,255,0.3);
+    color: var(--accent);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    padding: 4px 12px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+  }
+  #cover h1 {
+    font-size: clamp(32px, 5vw, 60px);
+    font-weight: 800;
+    line-height: 1.1;
+    color: var(--text);
+    margin-bottom: 20px;
+  }
+  #cover h1 span { color: var(--accent); }
+  .cover-subtitle {
+    font-size: 18px;
+    color: var(--muted);
+    max-width: 640px;
+    margin-bottom: 40px;
+  }
+  .cover-meta {
+    display: flex; gap: 32px; flex-wrap: wrap;
+    margin-bottom: 48px;
+  }
+  .cover-meta-item { display: flex; flex-direction: column; gap: 2px; }
+  .cover-meta-item .label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted); }
+  .cover-meta-item .value { font-size: 14px; font-weight: 600; color: var(--text); }
+  .kpi-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+    gap: 12px;
+    margin-top: 48px;
+  }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    text-align: center;
+  }
+  .kpi-card .kpi-num { font-size: 28px; font-weight: 800; color: var(--accent); font-family: var(--font-mono); }
+  .kpi-card .kpi-lbl { font-size: 11px; color: var(--muted); margin-top: 4px; }
+
+  /* ── Section headers ────────────────────────────────────────── */
+  .section-label {
+    display: inline-block;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--accent);
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    margin-bottom: 8px;
+  }
+  h2 {
+    font-size: clamp(22px, 3vw, 34px);
+    font-weight: 700;
+    color: var(--text);
+    margin-bottom: 12px;
+    line-height: 1.2;
+  }
+  h3 {
+    font-size: 20px;
+    font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  h4 {
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  .lead {
+    font-size: 17px;
+    color: var(--muted);
+    max-width: 720px;
+    margin-bottom: 40px;
+  }
+
+  /* ── Cards ─────────────────────────────────────────────────── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 24px;
+    margin-bottom: 16px;
+  }
+  .card-accent { border-left: 3px solid var(--accent); }
+  .card-green  { border-left: 3px solid var(--green); }
+  .card-orange { border-left: 3px solid var(--orange); }
+  .card-purple { border-left: 3px solid var(--purple); }
+  .card-red    { border-left: 3px solid var(--red); }
+
+  /* ── Grid helpers ───────────────────────────────────────────── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  @media (max-width: 768px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  /* ── Tables ─────────────────────────────────────────────────── */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    background: #1c2128;
+    color: var(--accent);
+    font-weight: 600;
+    padding: 10px 14px;
+    text-align: left;
+    border-bottom: 2px solid var(--border);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--border); color: var(--text); }
+  tr:last-child td { border-bottom: none; }
+  tr:nth-child(even) td { background: rgba(255,255,255,0.02); }
+  .tbl-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
+
+  /* ── Block timeline ─────────────────────────────────────────── */
+  .timeline { display: flex; flex-direction: column; gap: 0; }
+  .tl-item { display: flex; gap: 0; }
+  .tl-left {
+    width: 80px; min-width: 80px;
+    display: flex; flex-direction: column; align-items: center;
+  }
+  .tl-dot {
+    width: 32px; height: 32px;
+    border-radius: 50%;
+    background: var(--accent);
+    color: #000;
+    font-weight: 800;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    display: flex; align-items: center; justify-content: center;
+    flex-shrink: 0;
+    z-index: 1;
+  }
+  .tl-line { flex: 1; width: 2px; background: var(--border); margin: 4px 0; }
+  .tl-item:last-child .tl-line { display: none; }
+  .tl-content { padding: 0 0 32px 16px; flex: 1; }
+  .tl-content h4 { color: var(--text); font-size: 14px; font-weight: 700; margin-bottom: 4px; }
+  .tl-content p { color: var(--muted); font-size: 13px; }
+  .tl-content .tl-tag {
+    display: inline-block;
+    background: rgba(88,166,255,0.1);
+    border: 1px solid rgba(88,166,255,0.25);
+    color: var(--accent);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    padding: 2px 8px;
+    border-radius: 10px;
+    margin-bottom: 6px;
+  }
+
+  /* ── Output gallery ─────────────────────────────────────────── */
+  .gallery { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; }
+  .gallery-item { }
+  .gallery-item .img-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    margin-bottom: 10px;
+  }
+  .gallery-item .img-wrap img { width: 100%; }
+  .gallery-item .img-label { font-size: 12px; color: var(--muted); font-family: var(--font-mono); }
+  .gallery-item .img-title { font-size: 13px; font-weight: 600; color: var(--text); margin-bottom: 2px; }
+
+  /* ── Findings ────────────────────────────────────────────────── */
+  .finding {
+    display: flex; gap: 16px; align-items: flex-start;
+    padding: 16px 0;
+    border-bottom: 1px solid var(--border);
+  }
+  .finding:last-child { border-bottom: none; }
+  .finding-icon {
+    font-size: 22px;
+    flex-shrink: 0;
+    width: 40px;
+    text-align: center;
+    margin-top: 2px;
+  }
+  .finding-body h4 { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 4px; }
+  .finding-body p { font-size: 13px; color: var(--muted); }
+  .finding-body .val { color: var(--accent); font-weight: 700; font-family: var(--font-mono); }
+
+  /* ── Pill badges ─────────────────────────────────────────────── */
+  .badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+  }
+  .badge-blue   { background: rgba(88,166,255,0.15); color: var(--accent); }
+  .badge-green  { background: rgba(63,185,80,0.15);  color: var(--green); }
+  .badge-orange { background: rgba(210,153,34,0.15); color: var(--orange); }
+  .badge-purple { background: rgba(188,140,255,0.15);color: var(--purple); }
+  .badge-red    { background: rgba(248,81,73,0.15);  color: var(--red); }
+
+  /* ── Lib grid ────────────────────────────────────────────────── */
+  .lib-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px; }
+  .lib-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 16px;
+    display: flex; flex-direction: column; gap: 4px;
+  }
+  .lib-card .lib-name { font-size: 13px; font-weight: 700; font-family: var(--font-mono); color: var(--teal); }
+  .lib-card .lib-use  { font-size: 12px; color: var(--muted); }
+
+  /* ── Spec bar ─────────────────────────────────────────────────── */
+  .spec-bar { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+  .spec-bar .spec-label { font-size: 12px; color: var(--muted); width: 160px; flex-shrink: 0; }
+  .spec-bar .spec-track { flex: 1; height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .spec-bar .spec-fill  { height: 100%; border-radius: 3px; background: var(--accent); }
+  .spec-bar .spec-val   { font-size: 12px; font-family: var(--font-mono); color: var(--text); width: 80px; text-align: right; }
+
+  /* ── Alert / callout ─────────────────────────────────────────── */
+  .callout {
+    border-left: 3px solid var(--accent);
+    background: rgba(88,166,255,0.06);
+    border-radius: 0 8px 8px 0;
+    padding: 14px 18px;
+    margin: 20px 0;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  .callout strong { color: var(--text); }
+
+  /* ── Footer ──────────────────────────────────────────────────── */
+  footer {
+    background: var(--surface);
+    border-top: 1px solid var(--border);
+    padding: 48px 32px;
+    text-align: center;
+  }
+  footer .footer-name { font-size: 20px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+  footer p { color: var(--muted); font-size: 13px; }
+
+  /* ── Divider ─────────────────────────────────────────────────── */
+  hr { border: none; border-top: 1px solid var(--border); margin: 32px 0; }
+</style>
+</head>
+<body>
+
+<!-- ── NAV ──────────────────────────────────────────────────────────── -->
+<nav>
+  <span class="brand">Tanager-1 · MR</span>
+  <a href="#cover">Inicio</a>
+  <a href="#contexto">Contexto</a>
+  <a href="#materiales">Materiales</a>
+  <a href="#metodologia">Metodología</a>
+  <a href="#resultados">Resultados</a>
+  <a href="#bioquimica">Bioquímica</a>
+  <a href="#pca">PCA</a>
+  <a href="#plsr">PLSR</a>
+  <a href="#clustering">Clustering</a>
+  <a href="#dashboard">Dashboard</a>
+  <a href="#conclusiones">Conclusiones</a>
+  <a href="#fuentes">Fuentes</a>
+</nav>
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  COVER                                                             -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="cover">
+  <div class="container">
+    <div class="cover-tag">Tanager Open Data Competition · Planet Labs · 2025</div>
+    <h1>Análisis Hiperespectral<br>de <span>Cultivos Agrícolas</span><br>desde el Espacio</h1>
+    <p class="cover-subtitle">
+      Caracterización fisiológica y bioquímica de 66 parcelas agrícolas en Mato Grosso, Brasil,
+      mediante imágenes hiperespectrales Tanager-1 (426 bandas · 30 m · 376–2499 nm).
+    </p>
+    <div class="cover-meta">
+      <div class="cover-meta-item">
+        <span class="label">Autor</span>
+        <span class="value">Manuel Ramos</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Institución</span>
+        <span class="value">Investigador independiente · Panamá</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Fecha de imagen</span>
+        <span class="value">2025-05-01</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Área de estudio</span>
+        <span class="value">Mato Grosso, Brasil</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Proyección</span>
+        <span class="value">UTM 21S · EPSG:32721</span>
+      </div>
+      <div class="cover-meta-item">
+        <span class="label">Competencia</span>
+        <span class="value">Tanager Open Data</span>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="kpi-card">
+        <div class="kpi-num">426</div>
+        <div class="kpi-lbl">Bandas espectrales</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">30 m</div>
+        <div class="kpi-lbl">Resolución espacial</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">66</div>
+        <div class="kpi-lbl">Parcelas analizadas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">12</div>
+        <div class="kpi-lbl">Índices fisiológicos</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">6</div>
+        <div class="kpi-lbl">Variables bioquímicas</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">&gt;0.93</div>
+        <div class="kpi-lbl">R² PLSR (LOO-CV)</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">96.9%</div>
+        <div class="kpi-lbl">Varianza explicada PCA</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-num">0.636</div>
+        <div class="kpi-lbl">Silhouette clustering</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CONTEXTO                                                          -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="contexto">
+  <div class="container">
+    <div class="section-label">// 01 · Contexto</div>
+    <h2>Escena y objetivo del análisis</h2>
+    <p class="lead">
+      La competencia Tanager Open Data de Planet Labs libera datos hiperespectrales de acceso abierto
+      para fomentar investigación agronómica y ambiental. Este trabajo caracteriza el estado fisiológico
+      de cultivos en el cerrado brasileño (Mato Grosso) con potencial de replicación en Panamá.
+    </p>
+
+    <div class="grid-2">
+      <div class="card card-accent">
+        <h4>Sensor: Tanager-1</h4>
+        <p>Satélite hiperespectral de Planet Labs (constelación Tanager). Primera generación del sensor
+        hiperespectral de alta resolución espacial disponible comercialmente a escala global.</p>
+        <hr>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; font-size:13px;">
+          <div><span style="color:var(--muted)">Bandas:</span> <strong>426</strong></div>
+          <div><span style="color:var(--muted)">Paso:</span> <strong>5 nm</strong></div>
+          <div><span style="color:var(--muted)">Rango:</span> <strong>376–2499 nm</strong></div>
+          <div><span style="color:var(--muted)">Resolución:</span> <strong>30 m</strong></div>
+          <div><span style="color:var(--muted)">Producto:</span> <strong>Surface Reflectance</strong></div>
+          <div><span style="color:var(--muted)">Formato:</span> <strong>HDF5 (HDFEOS)</strong></div>
+        </div>
+      </div>
+
+      <div class="card card-green">
+        <h4>Escena analizada</h4>
+        <p>Imagen ortorectificada de reflectancia superficial capturada el 1 de mayo de 2025 sobre
+        Mato Grosso, Brasil — región de producción agrícola intensiva en el cerrado.</p>
+        <hr>
+        <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:12px; font-size:13px;">
+          <div><span style="color:var(--muted)">ID imagen:</span> <code>20250501_143138_87_4001</code></div>
+          <div><span style="color:var(--muted)">Cobertura:</span> <strong>752 × 784 px</strong></div>
+          <div><span style="color:var(--muted)">Píxeles limpios:</span> <strong>71.7%</strong></div>
+          <div><span style="color:var(--muted)">Lotes test:</span> <strong>66 (A1–A66)</strong></div>
+          <div><span style="color:var(--muted)">Cultivo probable:</span> <strong>Soja / Maíz 2ª safra</strong></div>
+          <div><span style="color:var(--muted)">Época:</span> <strong>Cosecha soja / inicio maíz</strong></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:20px;">
+      <h4>Objetivo central</h4>
+      <p>
+        Estimar de forma cuantitativa las variables bioquímicas y nutricionales por parcela, usando
+        únicamente los datos espectrales del producto SR de Tanager-1, sin mediciones de campo.
+        Las 66 parcelas (A1–A66) son las unidades de análisis. Por cada lote se extrae el perfil
+        espectral medio y se estiman seis variables bioquímicas clave.
+      </p>
+    </div>
+
+    <div class="grid-3" style="margin-top:20px;">
+      <div class="card">
+        <h4>Fisiología de cultivos</h4>
+        <p style="font-size:13px; color:var(--muted)">Diagnóstico temprano del estado nutricional
+        y de estrés antes de que aparezcan síntomas visuales, usando el espectro completo como "huella digital" fisiológica.</p>
+      </div>
+      <div class="card">
+        <h4>Agricultura de precisión</h4>
+        <p style="font-size:13px; color:var(--muted)">Identificar zonas de manejo diferenciado dentro
+        de la escena para optimizar la aplicación de insumos (fertilizantes, riego) a escala de parcela.</p>
+      </div>
+      <div class="card">
+        <h4>Aplicación futura Panamá</h4>
+        <p style="font-size:13px; color:var(--muted)">La metodología es replicable sobre cultivos
+        panameños (arroz, maíz) mediante imágenes hiperespectrales equivalentes y validación de campo.</p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Nota metodológica:</strong> El cultivo es desconocido. Mayo en Mato Grosso corresponde a
+      cosecha de soja o inicio de la segunda safra de maíz. Los índices espectrales utilizados son
+      agno-cultivo-agnósticos y aplican a soja, maíz y algodón por igual.
+    </div>
+
+    <!-- Output imagen RGB -->
+    <h3 style="margin-top:40px; margin-bottom:16px;">Vista general de la escena</h3>
+    <div class="gallery">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/03_RGB_calidad_lotes.png" alt="RGB + calidad + lotes">
+        </div>
+        <div class="img-title">RGB ortorectificado + máscara de calidad + 66 lotes</div>
+        <div class="img-label">OUTPUTS/03_RGB_calidad_lotes.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/03_perfil_espectral_medio.png" alt="Perfil espectral medio">
+        </div>
+        <div class="img-title">Perfil espectral medio de la escena (426 bandas)</div>
+        <div class="img-label">OUTPUTS/03_perfil_espectral_medio.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  MATERIALES Y RECURSOS                                             -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="materiales">
+  <div class="container">
+    <div class="section-label">// 02 · Materiales y Recursos</div>
+    <h2>Datos, herramientas y bibliografía</h2>
+    <p class="lead">
+      El pipeline completo se ejecuta sobre datos abiertos de Planet Labs sin dependencias de campo.
+      Todo el stack tecnológico es open source, reproducible y desplegable en entornos cloud gratuitos.
+    </p>
+
+    <h3>Archivos de entrada</h3>
+    <div class="tbl-wrap" style="margin: 16px 0 32px;">
+      <table>
+        <thead>
+          <tr><th>Archivo</th><th>Tipo</th><th>Descripción</th><th>Dimensiones</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>20250501_143138_87_4001_ortho_sr_hdf5.h5</code></td>
+            <td><span class="badge badge-blue">HDF5</span></td>
+            <td>Cubo de reflectancia superficial hiperespectral ortorectificada (SR)</td>
+            <td>426 × 752 × 784</td>
+          </tr>
+          <tr>
+            <td><code>20250501_143138_87_4001_ortho_beta_udm.tif</code></td>
+            <td><span class="badge badge-orange">GeoTIFF</span></td>
+            <td>Máscara de datos utilizables (UDM) — nubes, cirrus, nodata</td>
+            <td>752 × 784</td>
+          </tr>
+          <tr>
+            <td><code>20250501_143138_87_4001_ortho_visual.tif</code></td>
+            <td><span class="badge badge-orange">GeoTIFF</span></td>
+            <td>Composición RGB visual ortorectificada</td>
+            <td>3 × 752 × 784</td>
+          </tr>
+          <tr>
+            <td><code>20250501_143138_87_4001_geolocation_array.tif</code></td>
+            <td><span class="badge badge-orange">GeoTIFF</span></td>
+            <td>Array de geolocalización (lat/lon por píxel)</td>
+            <td>752 × 784</td>
+          </tr>
+          <tr>
+            <td><code>Lotes_test.shp</code></td>
+            <td><span class="badge badge-green">Shapefile</span></td>
+            <td>66 polígonos de parcelas test A1–A66, EPSG:32721</td>
+            <td>66 features</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>Stack tecnológico</h3>
+    <div class="lib-grid" style="margin: 16px 0 32px;">
+      <div class="lib-card">
+        <span class="lib-name">h5py</span>
+        <span class="lib-use">Lectura y exploración del HDF5 HDFEOS</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">numpy</span>
+        <span class="lib-use">Operaciones matriciales sobre el cubo espectral</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">rasterio</span>
+        <span class="lib-use">I/O GeoTIFF, georreferencia, exportación de índices</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">geopandas</span>
+        <span class="lib-use">Manejo de shapefile, máscaras por lote, proyecciones</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">matplotlib</span>
+        <span class="lib-use">Mapas, perfiles espectrales, heatmaps, figuras de análisis</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">scikit-learn</span>
+        <span class="lib-use">PCA, PLSR (PLSRegression), k-means, LOO-CV, silhouette</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">scipy</span>
+        <span class="lib-use">Filtros espaciales (uniform_filter), interpolación REIP</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">pandas</span>
+        <span class="lib-use">Tablas de estadísticas por lote, CSVs de resultados</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">plotly</span>
+        <span class="lib-use">Gráficos interactivos del dashboard web</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">dash</span>
+        <span class="lib-use">Framework web para el dashboard interactivo</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">gunicorn</span>
+        <span class="lib-use">Servidor WSGI para producción en Render.com</span>
+      </div>
+      <div class="lib-card">
+        <span class="lib-name">pyproj / shapely</span>
+        <span class="lib-use">Transformaciones de coordenadas y operaciones geométricas</span>
+      </div>
+    </div>
+
+    <h3>Regiones espectrales utilizadas</h3>
+    <div style="margin: 16px 0 32px;">
+      <div class="spec-bar">
+        <span class="spec-label">Blue (400–500 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:24%; background:#4488CC;"></div></div>
+        <span class="spec-val">Carotenoides, pigmentos</span>
+      </div>
+      <div class="spec-bar">
+        <span class="spec-label">Green (500–680 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:44%; background:#44AA44;"></div></div>
+        <span class="spec-val">Clorofila, reflectancia foliar</span>
+      </div>
+      <div class="spec-bar">
+        <span class="spec-label">Red-Edge (700–750 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:12%; background:#FF7700;"></div></div>
+        <span class="spec-val">N foliar, clorofila, REIP</span>
+      </div>
+      <div class="spec-bar">
+        <span class="spec-label">NIR (750–1300 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:68%; background:#888888;"></div></div>
+        <span class="spec-val">Biomasa, estructura celular</span>
+      </div>
+      <div class="spec-bar">
+        <span class="spec-label">SWIR-1 (1500–1800 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:40%; background:#CC8844;"></div></div>
+        <span class="spec-val">Agua foliar, contenido hídrico</span>
+      </div>
+      <div class="spec-bar">
+        <span class="spec-label">SWIR-2 (2000–2500 nm)</span>
+        <div class="spec-track"><div class="spec-fill" style="width:65%; background:#994422;"></div></div>
+        <span class="spec-val">N, lignina, celulosa, materia seca</span>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Regiones de absorción de agua (H₂O):</strong> Las bandas 1340–1460 nm y 1790–1970 nm
+      presentan alta absorción atmosférica y señal ruidosa. Estas regiones fueron enmascaradas antes
+      de calcular cualquier índice SWIR para garantizar calidad espectral.
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  METODOLOGÍA                                                       -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="metodologia">
+  <div class="container">
+    <div class="section-label">// 03 · Metodología</div>
+    <h2>Pipeline completo — 15 bloques de análisis</h2>
+    <p class="lead">
+      El análisis se estructura en 15 bloques secuenciales ejecutados en Jupyter Notebook.
+      Cada bloque produce outputs auditables (CSV, GeoTIFF, PNG) que alimentan los bloques siguientes
+      y el dashboard web final.
+    </p>
+
+    <div class="grid-2" style="margin-bottom:32px;">
+      <div class="card card-accent">
+        <h4>Flujo general del pipeline</h4>
+        <pre>HDF5 SR (426 bandas, 752×784 px)
+  │
+  ├─ Exploración, wavelengths, georreferencia
+  │
+  ├─ Máscara calidad (nubes + nodata + H₂O)
+  │
+  ├─ Cálculo 12 índices → 12 GeoTIFFs
+  │
+  ├─ Estadísticas por lote → CSV 66×73
+  │
+  ├─ Estimación bioquímica → 6 variables
+  │
+  ├─ Perfiles espectrales medios por lote
+  │
+  ├─ PCA espectral 66×426 → PC1-PC5
+  │
+  ├─ PLSR LOO-CV → R² por variable
+  │
+  ├─ Heterogeneidad intra-lote (CV)
+  │
+  ├─ REIP continuo 30m (gradiente N)
+  │
+  └─ k-means clustering → 2 zonas de manejo</pre>
+      </div>
+      <div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Inputs del pipeline</h4>
+          <p style="font-size:13px; color:var(--muted);">1 archivo HDF5 + 1 shapefile → sin datos de campo, sin calibración adicional</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Outputs generados</h4>
+          <p style="font-size:13px; color:var(--muted);">12 GeoTIFFs + 9 CSVs + 16 figuras PNG + 1 GeoJSON con 105 atributos</p>
+        </div>
+        <div class="card">
+          <h4>Reproducibilidad</h4>
+          <p style="font-size:13px; color:var(--muted);">Cada bloque lee únicamente los outputs del anterior (no recalcula desde HDF5) garantizando consistencia total del análisis</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="timeline">
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">00</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">SETUP</div>
+          <h4>Entorno, rutas y variables globales</h4>
+          <p>Configuración del entorno Python 3.11. Fix de PROJ_DATA para rasterio en Windows.
+          Definición de rutas absolutas (BASE, RES_DIR, OUT_DIR). Verificación de existencia de archivos de entrada.</p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">01</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">EXPLORACIÓN</div>
+          <h4>Exploración interna del HDF5 (estructura HDFEOS)</h4>
+          <p>Recorrido completo del árbol HDF5 con <code>visititems()</code>. Extracción de grupos,
+          datasets y atributos. Identificación del path de datos:
+          <code>HDFEOS/GRIDS/HYP/Data Fields/surface_reflectance</code>.
+          Lectura del atributo <code>wavelengths</code> (nm directos, sin conversión).</p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">02</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">DIAGNÓSTICO</div>
+          <h4>Wavelengths, estadísticas SR, cobertura y georreferencia</h4>
+          <p>Verificación del vector de longitudes de onda (426 bandas, 376–2499 nm, paso 5 nm).
+          Estadísticas globales del cubo SR (percentiles, valores negativos, fill value).
+          Análisis de cobertura: 71.7% píxeles limpios, nube/cirrus/nodata cuantificados.
+          Georreferencia extraída del StructMetadata.0 — UTM 21S.</p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">03</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">VISUALIZACIÓN</div>
+          <h4>RGB + mapa de calidad + lotes visualizados</h4>
+          <p>Composición RGB ortorectificada con stretch de percentiles. Mapa de calidad
+          (verde = limpio / rojo = nube/cirrus / negro = nodata). Superposición de los 66 lotes
+          del shapefile <code>Lotes_test.shp</code>. Perfil espectral medio de la escena completa.</p>
+          <p style="margin-top:8px;"><span class="badge badge-orange">OUTPUTS/03_RGB_calidad_lotes.png</span>
+          <span class="badge badge-orange">OUTPUTS/03_perfil_espectral_medio.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">04</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">ÍNDICES</div>
+          <h4>Cálculo de 12 índices fisiológicos Tier 1 + Tier 2</h4>
+          <p>Extracción del cubo completo SR desde HDF5. Clip de negativos a 0. Enmascarado de
+          bandas H₂O (1340–1460 nm, 1790–1970 nm). Cálculo de los 12 índices usando interpolación
+          lineal para obtener exactamente la banda más próxima a cada longitud de onda objetivo.</p>
+          <div class="tbl-wrap" style="margin-top:12px;">
+            <table>
+              <thead><tr><th>Índice</th><th>Fórmula</th><th>Variable fisiológica</th><th>Tier</th></tr></thead>
+              <tbody>
+                <tr><td><strong>NDRE</strong></td><td>(R750−R705)/(R750+R705)</td><td>Clorofila / N foliar</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>CIre</strong></td><td>(R800/R715)−1</td><td>Clorofila lineal (sin saturación)</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>PRI</strong></td><td>(R531−R570)/(R531+R570)</td><td>Eficiencia fotosintética, estrés temprano</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>NDWI</strong></td><td>(R860−R1240)/(R860+R1240)</td><td>Contenido hídrico foliar</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>WBI</strong></td><td>R900/R970</td><td>Estrés hídrico foliar</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>MCARI</strong></td><td>[(R700−R670)−0.2(R700−R550)]×(R700/R670)</td><td>Clorofila corregida por efectos de suelo</td><td><span class="badge badge-green">T1</span></td></tr>
+                <tr><td><strong>mNDVI705</strong></td><td>(R750−R705)/(R750+R705−2×R445)</td><td>Clorofila (mejor en gramíneas)</td><td><span class="badge badge-blue">T2</span></td></tr>
+                <tr><td><strong>TCARI/OSAVI</strong></td><td>ratio TCARI ÷ OSAVI</td><td>Clorofila sin efecto de suelo</td><td><span class="badge badge-blue">T2</span></td></tr>
+                <tr><td><strong>SIPI</strong></td><td>(R800−R445)/(R800−R680)</td><td>Carotenoides / estrés oxidativo</td><td><span class="badge badge-blue">T2</span></td></tr>
+                <tr><td><strong>REIP</strong></td><td>Interpolación lineal red-edge</td><td>Senescencia, N foliar (punto de inflexión)</td><td><span class="badge badge-blue">T2</span></td></tr>
+                <tr><td><strong>Datt1</strong></td><td>(R850−R710)/(R850−R680)</td><td>Clorofila hiperspectral</td><td><span class="badge badge-blue">T2</span></td></tr>
+                <tr><td><strong>NDVI</strong></td><td>(R800−R670)/(R800+R670)</td><td>Vigor / biomasa (referencia)</td><td><span class="badge badge-blue">T2</span></td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">05</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">MAPAS</div>
+          <h4>Máscara NDVI &gt; 0.3, clip rangos válidos, mapas grilla, 12 GeoTIFFs</h4>
+          <p>Aplicación de máscara de vegetación válida (NDVI &gt; 0.3). Clip de cada índice a su
+          rango fisiológico esperado (NaN para píxeles fuera de rango). Exportación de los 12 índices
+          como GeoTIFFs georreferenciados (EPSG:32721). Figura grilla 4×3 comparativa.</p>
+          <p style="margin-top:8px;"><span class="badge badge-orange">OUTPUTS/05_*.tif (×12)</span>
+          <span class="badge badge-orange">OUTPUTS/05_indices_mapa_grilla.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">06</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">ESTADÍSTICAS</div>
+          <h4>Estadísticas por lote → CSV 66×73 + mapa coroplético + boxplot</h4>
+          <p>Para cada uno de los 66 lotes: extracción de píxeles válidos dentro del polígono,
+          cálculo de media, desviación estándar, p10, p25, p75, p90 para cada uno de los 12 índices.
+          Resultado: tabla 66 lotes × 73 columnas. Mapa coroplético por índice. Boxplot comparativo.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/06_estadisticas_por_lote.csv</span>
+          <span class="badge badge-orange">OUTPUTS/06_mapa_coropletico_lotes.png</span>
+          <span class="badge badge-orange">OUTPUTS/06_boxplot_lotes.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">07</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">BIOQUÍMICA</div>
+          <h4>Estimación bioquímica cuantitativa + heatmap + radar + semáforo</h4>
+          <p>Conversión de índices espectrales a unidades bioquímicas usando ecuaciones de literatura
+          (Gitelson 2003, Clevers 2013). Estimación de 6 variables por lote: clorofila (µg/cm²),
+          N foliar (relativo), contenido hídrico (%), eficiencia fotosintética, biomasa y estrés
+          carotenoides. Visualización como heatmap, radar individual por lote y semáforo de alerta.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/07_bioquimica_por_lote.csv</span>
+          <span class="badge badge-orange">OUTPUTS/07_heatmap_bioquimica.png</span>
+          <span class="badge badge-orange">OUTPUTS/07_radar_bioquimica.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">08</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">ESPECTRAL</div>
+          <h4>Perfiles espectrales por lote — top5 / bottom5 / mediana / diferencia</h4>
+          <p>Extracción del perfil espectral medio de los 426 bandas para cada lote.
+          Comparación visual de los 5 lotes con mayor NDRE vs los 5 con menor NDRE.
+          Diferencia espectral (top − bottom) para identificar bandas diagnósticas.
+          Los perfiles completos se guardan como CSV para el dashboard y el PLSR.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/08_perfiles_espectrales.csv</span>
+          <span class="badge badge-orange">OUTPUTS/08_perfiles_espectrales_lotes.png</span>
+          <span class="badge badge-orange">OUTPUTS/08_diferencia_espectral.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">09</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">PCA</div>
+          <h4>PCA espectral — 66 lotes × 426 bandas</h4>
+          <p>Análisis de Componentes Principales sobre la matriz de perfiles espectrales medios
+          estandarizados (66 × 426). Cálculo de scores (posición de cada lote), loadings
+          (peso de cada banda), scree plot, biplot PC1/PC2, correlación PCs vs índices.
+          Identificación de las bandas que dominan cada componente principal.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/09_pca_scores.csv</span>
+          <span class="badge badge-green">OUTPUTS/09_pca_loadings.csv</span>
+          <span class="badge badge-green">OUTPUTS/09_perfiles_todos_lotes.csv</span>
+          <span class="badge badge-orange">OUTPUTS/09_pca_espectral.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">10</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">PLSR</div>
+          <h4>PLSR — 6 variables bioquímicas, LOO-CV, VIP scores</h4>
+          <p>Partial Least Squares Regression con X = espectros medios estandarizados (66×426)
+          e y = estimaciones bioquímicas del Block 07. Validación Leave-One-Out (n=66).
+          6 componentes latentes. VIP scores para identificar regiones espectrales diagnósticas.
+          Mapa de predicción a nivel de píxel para Cab y N relativo.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/10_vip_scores.csv</span>
+          <span class="badge badge-orange">OUTPUTS/10_plsr_bioquimica.png</span>
+          <span class="badge badge-orange">OUTPUTS/10_mapa_plsr_pixeles.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">11</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">VALIDACIÓN</div>
+          <h4>Comparación empírico vs PLSR — validación cruzada metodológica</h4>
+          <p>Correlación de Pearson entre los valores estimados por índices empíricos (Block 07)
+          y los predichos por PLSR (Block 10). Verificación de coherencia metodológica:
+          r &gt; 0.97 para Biomasa y Estrés confirma que ambos enfoques capturan la misma señal espectral.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/11_acuerdo_empirico_plsr.csv</span>
+          <span class="badge badge-orange">OUTPUTS/11_comparacion_empirico_plsr.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">12</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">HETEROGENEIDAD</div>
+          <h4>Heterogeneidad intra-lote (CV local ventana 5×5 = 150m)</h4>
+          <p>Coeficiente de variación local píxel a píxel para NDRE, WBI y REIP, calculado sobre
+          ventanas 5×5 (150 m). Enmascarado estrictamente dentro de los polígonos de lotes.
+          Estadística promedio por lote = "score de heterogeneidad". Ranking de lotes más y menos
+          uniformes para priorización de manejo variable.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/12_heterogeneidad_lotes.csv</span>
+          <span class="badge badge-orange">OUTPUTS/12_heterogeneidad_lotes.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">13</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">REIP</div>
+          <h4>Gradiente N foliar continuo — REIP píxel a píxel 30m</h4>
+          <p>Lectura directa de <code>05_REIP.tif</code> (no recalculado desde HDF5 para garantizar
+          consistencia). Máscara solo dentro de los 66 lotes + vegetación válida. Histogramas de
+          distribución por lote. Gradiente visual de N foliar a 30 m de resolución.
+          Ranking de lotes top/bottom N.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/13_reip_por_lote.csv</span>
+          <span class="badge badge-orange">OUTPUTS/13_reip_gradiente_N.png</span></p>
+        </div>
+      </div>
+
+      <div class="tl-item">
+        <div class="tl-left">
+          <div class="tl-dot">14</div>
+          <div class="tl-line"></div>
+        </div>
+        <div class="tl-content">
+          <div class="tl-tag">CLUSTERING</div>
+          <h4>Fingerprint bioquímico multivariado + k-means clustering</h4>
+          <p>Feature matrix: PC1 + PC2 + PC3 + 6 variables bioquímicas por lote (9 features, estandarizadas).
+          Búsqueda del k óptimo por silhouette score (k=2…6). k=2 óptimo con silhouette=0.636
+          (separación muy fuerte). Mapa espacial de zonas. Boxplots bioquímicos por zona.
+          Tabla síntesis final.</p>
+          <p style="margin-top:8px;"><span class="badge badge-green">OUTPUTS/14_clustering_lotes.csv</span>
+          <span class="badge badge-orange">OUTPUTS/14_fingerprint_clustering.png</span></p>
+        </div>
+      </div>
+
+    </div><!-- /timeline -->
+
+    <!-- Output grilla índices -->
+    <h3 style="margin-top:40px; margin-bottom:16px;">Mapa grilla de 12 índices fisiológicos</h3>
+    <div class="gallery">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/05_indices_mapa_grilla.png" alt="Grilla 12 índices">
+        </div>
+        <div class="img-title">12 índices fisiológicos — distribución espacial píxel a píxel</div>
+        <div class="img-label">OUTPUTS/05_indices_mapa_grilla.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/06_mapa_coropletico_lotes.png" alt="Mapa coroplético por lote">
+        </div>
+        <div class="img-title">Mapa coroplético — estadísticas por parcela</div>
+        <div class="img-label">OUTPUTS/06_mapa_coropletico_lotes.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  RESULTADOS — ESCENA Y PERFILES                                    -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="resultados">
+  <div class="container">
+    <div class="section-label">// 04 · Resultados</div>
+    <h2>Caracterización fisiológica de la escena</h2>
+    <p class="lead">
+      El análisis revela una escena dominada por vegetación densa activa en etapa avanzada,
+      con alta clorofila generalizada y ausencia de estrés hídrico. Las diferencias entre
+      parcelas responden principalmente al contenido de agua y nitrógeno foliar, no a clorofila.
+    </p>
+
+    <h3 style="margin-bottom:16px;">Hallazgos de la escena global</h3>
+    <div class="card" style="margin-bottom:24px;">
+      <div class="finding">
+        <div class="finding-icon">🌿</div>
+        <div class="finding-body">
+          <h4>Vegetación densa y activa</h4>
+          <p>NDVI medio de <span class="val">0.895</span> — confirma canopeo cerrado denso, típico de soja en estadio R5–R6 o maíz en llenado de grano. 70.8% de píxeles clasificados como vegetación válida.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-icon">🍃</div>
+        <div class="finding-body">
+          <h4>Alta clorofila sin estrés</h4>
+          <p>NDRE medio = <span class="val">0.64</span>, equivalente a <strong>40–60 µg/cm²</strong> de clorofila a+b.
+          Sin síntomas de senescencia activa.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-icon">💧</div>
+        <div class="finding-body">
+          <h4>Sin estrés hídrico</h4>
+          <p>WBI = <span class="val">1.10</span> (umbral de estrés: WBI &lt; 0.98). Toda la escena muestra
+          estado hídrico óptimo al momento de la captura.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-icon">⚡</div>
+        <div class="finding-body">
+          <h4>Fotosíntesis activa y uniforme</h4>
+          <p>PRI = <span class="val">−0.067</span> — ciclo de xantófilas activo, eficiencia fotosintética operando
+          sin estrés generalizado. El PRI es el único índice que mide <em>funcionamiento</em> fisiológico,
+          no estructura.</p>
+        </div>
+      </div>
+      <div class="finding">
+        <div class="finding-icon">📍</div>
+        <div class="finding-body">
+          <h4>REIP como mejor discriminador N entre lotes</h4>
+          <p>REIP medio = <span class="val">723 nm</span> con σ = 2.97 nm. El desplazamiento del punto de inflexión
+          del red-edge (700–740 nm) es la variable más sensible para diferenciar N foliar entre parcelas.</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Perfiles espectrales -->
+    <h3 style="margin-bottom:16px;">Perfiles espectrales por lote</h3>
+    <div class="gallery">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/08_perfiles_espectrales_lotes.png" alt="Perfiles espectrales">
+        </div>
+        <div class="img-title">Perfiles espectrales — top 5 vs bottom 5 NDRE vs mediana</div>
+        <div class="img-label">OUTPUTS/08_perfiles_espectrales_lotes.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/08_diferencia_espectral.png" alt="Diferencia espectral">
+        </div>
+        <div class="img-title">Diferencia espectral (top − bottom) — bandas diagnósticas</div>
+        <div class="img-label">OUTPUTS/08_diferencia_espectral.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/06_boxplot_lotes.png" alt="Boxplot estadísticas lotes">
+        </div>
+        <div class="img-title">Distribución de índices espectrales entre los 66 lotes</div>
+        <div class="img-label">OUTPUTS/06_boxplot_lotes.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/13_reip_gradiente_N.png" alt="Gradiente N REIP">
+        </div>
+        <div class="img-title">Gradiente N foliar — REIP continuo 30m por parcela</div>
+        <div class="img-label">OUTPUTS/13_reip_gradiente_N.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  BIOQUÍMICA                                                        -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="bioquimica">
+  <div class="container">
+    <div class="section-label">// 05 · Estimación Bioquímica</div>
+    <h2>Variables bioquímicas por parcela (Block 07)</h2>
+    <p class="lead">
+      Conversión de índices espectrales a unidades físicas usando calibraciones de literatura.
+      Sin datos de campo — estimación solo espectral con incertidumbre declarada.
+    </p>
+
+    <div class="tbl-wrap" style="margin-bottom:24px;">
+      <table>
+        <thead>
+          <tr><th>Variable bioquímica</th><th>Rango estimado</th><th>Proxy espectral principal</th><th>Índices</th><th>Referencia</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Clorofila a+b (µg/cm²)</strong></td>
+            <td><span class="badge badge-green">26–51 µg/cm²</span></td>
+            <td>Red-edge absorption</td>
+            <td><code>NDRE, mNDVI705, CIre, Datt1</code></td>
+            <td>Gitelson 2003 / Clevers 2013</td>
+          </tr>
+          <tr>
+            <td><strong>Nitrógeno foliar (%)</strong></td>
+            <td><span class="badge badge-blue">Relativo (0–100)</span></td>
+            <td>Red-edge shift (REIP)</td>
+            <td><code>REIP, Datt1, CIre</code></td>
+            <td>Dash & Curran 2004</td>
+          </tr>
+          <tr>
+            <td><strong>Contenido hídrico (%)</strong></td>
+            <td><span class="badge badge-blue">Relativo</span></td>
+            <td>SWIR absorption</td>
+            <td><code>WBI, NDWI</code></td>
+            <td>Peñuelas et al. 1997</td>
+          </tr>
+          <tr>
+            <td><strong>Eficiencia fotosintética</strong></td>
+            <td><span class="badge badge-blue">Relativo</span></td>
+            <td>Xanthophyll 531/570 nm</td>
+            <td><code>PRI</code></td>
+            <td>Gamon et al. 1992</td>
+          </tr>
+          <tr>
+            <td><strong>Biomasa foliar (g/m²)</strong></td>
+            <td><span class="badge badge-blue">Relativo</span></td>
+            <td>NIR plateau</td>
+            <td><code>NDVI, OSAVI</code></td>
+            <td>Baret & Guyot 1991</td>
+          </tr>
+          <tr>
+            <td><strong>Estrés oxidativo (carotenoides)</strong></td>
+            <td><span class="badge badge-blue">Relativo</span></td>
+            <td>Blue/Red ratio</td>
+            <td><code>SIPI, MCARI</code></td>
+            <td>Peñuelas et al. 1995</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="margin-bottom:16px;">Dos zonas fisiológicas identificadas</h3>
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="card card-green">
+        <h4>Zona A — Canopeo productivo activo</h4>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+          La mayoría de los lotes (n≈58). Alto contenido de clorofila, nitrógeno y agua.
+          Indicadores de producción activa.
+        </p>
+        <div style="font-size:12px; font-family: var(--font-mono); color: var(--green);">
+          Lotes representativos:<br>
+          A3 · A6 · A7 · A20–A23 · A31–A34 · A38 · A53–A58
+        </div>
+        <hr style="margin:12px 0;">
+        <p style="font-size:12px; color:var(--text);">
+          <strong>Lote referencia: A23</strong> — 50.76 µg/cm² Cab, ALTO en 5/6 variables.
+        </p>
+      </div>
+      <div class="card card-red">
+        <h4>Zona B — Densidad reducida / estadio diferente</h4>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+          Lotes con baja clorofila y biomasa pero alta eficiencia y sin estrés hídrico.
+          Probable menor densidad de siembra o estadio fenológico diferente.
+        </p>
+        <div style="font-size:12px; font-family: var(--font-mono); color: var(--red);">
+          Lotes principales:<br>
+          A39–A66 (subconjunto)
+        </div>
+        <hr style="margin:12px 0;">
+        <p style="font-size:12px; color:var(--text);">
+          <strong>Lotes críticos: A16, A42, A48, A49</strong> — BAJO en 5/6 variables.
+        </p>
+      </div>
+    </div>
+
+    <div class="callout">
+      <strong>Caso especial — Lote A51:</strong> Cab ALTO (alta clorofila) pero Eficiencia = 0%.
+      Indica alta clorofila estructural sin ciclo de xantófilas activo — posible sombra o lote
+      en estadio de maduración con células de guarda cerradas.
+      Ningún lote es perfecto en las 6/6 dimensiones, confirmando complementariedad de los indicadores.
+    </div>
+
+    <div class="gallery" style="margin-top:24px;">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/07_heatmap_bioquimica.png" alt="Heatmap bioquímica">
+        </div>
+        <div class="img-title">Heatmap bioquímico — 66 lotes × 6 variables normalizadas</div>
+        <div class="img-label">OUTPUTS/07_heatmap_bioquimica.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/07_radar_bioquimica.png" alt="Radar bioquímica">
+        </div>
+        <div class="img-title">Radar plot — perfil bioquímico por lote vs media de escena</div>
+        <div class="img-label">OUTPUTS/07_radar_bioquimica.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  PCA                                                               -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="pca">
+  <div class="container">
+    <div class="section-label">// 06 · PCA Espectral</div>
+    <h2>Análisis de Componentes Principales — 66 lotes × 426 bandas</h2>
+    <p class="lead">
+      El PCA revela que las diferencias entre parcelas NO están en clorofila sino en agua foliar y
+      composición química (N, lignina, celulosa) — hallazgo contraintuitivo con implicaciones
+      directas para el manejo agronómico.
+    </p>
+
+    <div class="grid-3" style="margin-bottom:24px;">
+      <div class="card card-accent">
+        <h4>PC1 — 64.2% varianza</h4>
+        <p style="font-size:13px; color:var(--muted);">Carga dominante en <strong>SWIR-1 ~1753–1773 nm</strong>.
+        La primera y más importante fuente de diferencia entre lotes es el contenido de agua foliar
+        y densidad de canopeo. Los lotes difieren principalmente en cuánta agua tienen.</p>
+      </div>
+      <div class="card card-purple">
+        <h4>PC2 — 23.8% varianza</h4>
+        <p style="font-size:13px; color:var(--muted);">Carga dominante en <strong>SWIR-2 ~1977–2474 nm</strong>.
+        Segunda fuente de variación = composición química: nitrógeno foliar, lignina, celulosa.
+        Mismo rango espectral que los VIP scores del trabajo de referencia PRISMA.</p>
+      </div>
+      <div class="card card-orange">
+        <h4>PC3 — 8.9% varianza</h4>
+        <p style="font-size:13px; color:var(--muted);">Carga dominante en <strong>Blue ~421–431 nm</strong>.
+        Tercera fuente = carotenoides y pigmentos secundarios. Total acumulado:
+        <strong>96.9%</strong> con solo 3 componentes.</p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px;">
+      <h4>Conclusión agronómica del PCA</h4>
+      <p>
+        El red-edge (705–730 nm), que es el rango asociado a clorofila, <strong>NO domina ningún PC</strong>.
+        Esto confirma que los 66 lotes son homogéneos en clorofila. La variación real entre parcelas
+        responde a cuánta agua contienen (SWIR-1) y cuánto N/lignina acumulan (SWIR-2).
+        Esto tiene implicaciones directas: si se quiere diferenciar parcelas en esta escena,
+        hay que mirar el SWIR, no el red-edge.
+      </p>
+    </div>
+
+    <div class="gallery">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/09_pca_espectral.png" alt="PCA espectral">
+        </div>
+        <div class="img-title">PCA espectral — scree, biplots, loadings, correlación vs índices</div>
+        <div class="img-label">OUTPUTS/09_pca_espectral.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  PLSR                                                              -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="plsr">
+  <div class="container">
+    <div class="section-label">// 07 · PLSR + VIP Scores</div>
+    <h2>Regresión por Mínimos Cuadrados Parciales (PLSR)</h2>
+    <p class="lead">
+      El PLSR demuestra que el espectro completo de Tanager-1 predice las 6 variables bioquímicas
+      con R² &gt; 0.93 en validación cruzada Leave-One-Out, identificando las regiones espectrales más
+      informativas para cada variable.
+    </p>
+
+    <div class="tbl-wrap" style="margin-bottom:24px;">
+      <table>
+        <thead>
+          <tr><th>Variable bioquímica</th><th>R² LOO-CV</th><th>Bandas VIP dominantes</th><th>Interpretación</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>Clorofila a+b (Cab)</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>Red-edge 705–730 nm, NIR 800 nm</td>
+            <td>Red-edge sigue siendo diagnóstico para Cab a nivel de espectro completo</td>
+          </tr>
+          <tr>
+            <td><strong>N foliar relativo</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>Red-edge 710–730 nm, SWIR-2</td>
+            <td>REIP + SWIR-2 combinados capturan mejor el N que cualquier índice solo</td>
+          </tr>
+          <tr>
+            <td><strong>H₂O foliar</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>SWIR-1 1750–1800 nm</td>
+            <td>Consistente con PC1 del PCA: misma región espectral dominante</td>
+          </tr>
+          <tr>
+            <td><strong>Efic. fotosintética</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>NIR ~800 nm, Blue 430 nm</td>
+            <td>PRI (531/570) reforzado por contexto espectral amplio</td>
+          </tr>
+          <tr>
+            <td><strong>Biomasa relativa</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>NIR ~800 nm</td>
+            <td>NIR plateau es el predictor más estable de biomasa</td>
+          </tr>
+          <tr>
+            <td><strong>Estrés carotenoides</strong></td>
+            <td><span class="badge badge-green">&gt; 0.93</span></td>
+            <td>NIR ~800 nm, Blue</td>
+            <td>r Pearson &gt; 0.97 vs índice empírico confirma coherencia metodológica</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      <strong>Limitación declarada (transparencia metodológica):</strong> Los targets del PLSR son
+      proxies espectrales derivados del Block 07, no mediciones de campo directas.
+      El R² alto refleja consistencia espectral interna del modelo, no validación agronómica absoluta.
+      Para aplicación operacional se requeriría validación con muestras foliares de campo.
+    </div>
+
+    <div class="gallery" style="margin-top:24px;">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/10_plsr_bioquimica.png" alt="PLSR observado vs predicho">
+        </div>
+        <div class="img-title">PLSR — Observado vs Predicho (LOO-CV) para 6 variables</div>
+        <div class="img-label">OUTPUTS/10_plsr_bioquimica.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/10_mapa_plsr_pixeles.png" alt="Mapa PLSR píxeles">
+        </div>
+        <div class="img-title">Predicción PLSR a nivel de píxel — Cab y N relativo</div>
+        <div class="img-label">OUTPUTS/10_mapa_plsr_pixeles.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/11_comparacion_empirico_plsr.png" alt="Comparación empírico vs PLSR">
+        </div>
+        <div class="img-title">Validación cruzada metodológica — empírico vs PLSR</div>
+        <div class="img-label">OUTPUTS/11_comparacion_empirico_plsr.png</div>
+      </div>
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/12_heterogeneidad_lotes.png" alt="Heterogeneidad intra-lote">
+        </div>
+        <div class="img-title">Heterogeneidad intra-lote — CV NDRE/WBI/REIP por parcela</div>
+        <div class="img-label">OUTPUTS/12_heterogeneidad_lotes.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CLUSTERING                                                        -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="clustering">
+  <div class="container">
+    <div class="section-label">// 08 · Clustering</div>
+    <h2>Fingerprint bioquímico + zonas de manejo (k-means)</h2>
+    <p class="lead">
+      El clustering multivariado (PC1–PC3 + 6 variables bioquímicas) identifica 2 zonas de manejo
+      formales con separación muy fuerte (silhouette = 0.636), confirmando la estructura espacial
+      de la escena.
+    </p>
+
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="card card-green">
+        <h4>Zona A — Canopeo productivo normal</h4>
+        <div style="margin:12px 0;">
+          <span class="badge badge-green">62 lotes</span>
+          <span class="badge badge-green" style="margin-left:8px;">Biomasa ~83</span>
+          <span class="badge badge-green" style="margin-left:8px;">Estrés ~83</span>
+        </div>
+        <p style="font-size:13px; color:var(--muted);">
+          La gran mayoría de la escena. Canopeo normal, activo, con valores bioquímicos dentro
+          del rango esperado para el cultivo en estadio avanzado. Gestión estándar recomendada.
+        </p>
+      </div>
+      <div class="card card-red">
+        <h4>Zona B — Lotes atípicos</h4>
+        <div style="margin:12px 0;">
+          <span class="badge badge-red">4 lotes</span>
+          <span class="badge badge-red" style="margin-left:8px;">Biomasa ~25</span>
+          <span class="badge badge-red" style="margin-left:8px;">Estrés ~27</span>
+        </div>
+        <p style="font-size:13px; color:var(--muted);">
+          <strong>A59, A61, A62, A65</strong> — los 4 lotes más diferentes de toda la escena.
+          Biomasa y estrés en cuartil inferior. Requieren inspección prioritaria en campo.
+        </p>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:24px;">
+      <h4>Parámetros del clustering</h4>
+      <div style="display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; font-size:13px;">
+        <div><span style="color:var(--muted)">Algoritmo:</span> <strong>k-means</strong></div>
+        <div><span style="color:var(--muted)">k óptimo:</span> <strong>2</strong></div>
+        <div><span style="color:var(--muted)">Silhouette score:</span> <strong>0.636</strong></div>
+        <div><span style="color:var(--muted)">Features:</span> <strong>PC1+PC2+PC3 + 6 bioquímicas</strong></div>
+        <div><span style="color:var(--muted)">n_init:</span> <strong>20</strong></div>
+        <div><span style="color:var(--muted)">Estandarización:</span> <strong>StandardScaler</strong></div>
+        <div><span style="color:var(--muted)">k buscado:</span> <strong>2–6 (barrido)</strong></div>
+        <div><span style="color:var(--muted)">Separación:</span> <strong>Muy fuerte (&gt;0.5)</strong></div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:16px;">Heterogeneidad intra-lote — lotes prioritarios</h3>
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="card">
+        <h4 style="color:var(--red);">Más heterogéneos (manejo variable urgente)</h4>
+        <p style="font-size:13px; font-family:var(--font-mono); color:var(--text);">
+          A22 · A20 · A18 · A13 · A39
+        </p>
+        <p style="font-size:12px; color:var(--muted); margin-top:8px;">
+          A20 y A22 son heterogéneos Y tienen N bajo → doble alerta agronómica.
+          Alta variabilidad intra-lote sugiere manejo irregular previo.
+        </p>
+      </div>
+      <div class="card">
+        <h4 style="color:var(--green);">Más homogéneos (manejo uniforme)</h4>
+        <p style="font-size:13px; font-family:var(--font-mono); color:var(--text);">
+          A28 · A51 · A9 · A54 · A6
+        </p>
+        <p style="font-size:12px; color:var(--muted); margin-top:8px;">
+          Bajo coeficiente de variación espacial interno. Responden mejor a
+          prácticas de manejo uniformes a nivel de parcela completa.
+        </p>
+      </div>
+    </div>
+
+    <div class="gallery">
+      <div class="gallery-item">
+        <div class="img-wrap">
+          <img src="OUTPUTS/14_fingerprint_clustering.png" alt="Fingerprint clustering">
+        </div>
+        <div class="img-title">Fingerprint bioquímico + mapa de zonas de manejo k-means</div>
+        <div class="img-label">OUTPUTS/14_fingerprint_clustering.png</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  DASHBOARD                                                         -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="dashboard">
+  <div class="container">
+    <div class="section-label">// 09 · Dashboard Interactivo</div>
+    <h2>Web service — Tanager-1 Dashboard</h2>
+    <p class="lead">
+      Todos los resultados del análisis están disponibles como aplicación web interactiva,
+      desplegada en Render.com y alojada en GitHub. Sin dependencia del HDF5 en runtime —
+      100% ejecutable en el free tier.
+    </p>
+
+    <div class="grid-2" style="margin-bottom:24px;">
+      <div class="card card-accent">
+        <h4>Stack tecnológico</h4>
+        <div style="font-size:13px; display:grid; grid-template-columns: 1fr 1fr; gap:8px; margin-top:8px;">
+          <div><span style="color:var(--muted)">Framework:</span> <strong>Dash + Plotly</strong></div>
+          <div><span style="color:var(--muted)">Servidor:</span> <strong>Gunicorn (2 workers)</strong></div>
+          <div><span style="color:var(--muted)">Python:</span> <strong>3.11.9</strong></div>
+          <div><span style="color:var(--muted)">Deploy:</span> <strong>Render.com</strong></div>
+          <div><span style="color:var(--muted)">Repo:</span> <strong>AizPask13/Tanager1_Lab_MR</strong></div>
+          <div><span style="color:var(--muted)">Tema:</span> <strong>Dark #0d1117</strong></div>
+        </div>
+      </div>
+      <div class="card card-green">
+        <h4>Datos precomputados</h4>
+        <p style="font-size:13px; color:var(--muted); margin-bottom:12px;">
+          El HDF5 (6+ GB) no se sube al repo. Los datos del dashboard son los outputs del notebook:
+        </p>
+        <div style="font-size:12px; font-family:var(--font-mono); color:var(--teal);">
+          data/lotes_dashboard.geojson  (66 features × 105 atributos)<br>
+          data/06_estadisticas_por_lote.csv<br>
+          data/07_bioquimica_por_lote.csv<br>
+          data/09_perfiles_todos_lotes.csv<br>
+          data/09_pca_scores.csv<br>
+          data/10_vip_scores.csv<br>
+          data/12_heterogeneidad_lotes.csv<br>
+          data/13_reip_por_lote.csv<br>
+          data/14_clustering_lotes.csv
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-bottom:16px;">Las 6 pestañas del dashboard</h3>
+    <div class="grid-3">
+      <div class="card">
+        <h4>1. Mapa interactivo</h4>
+        <p style="font-size:13px; color:var(--muted);">Mapa coroplético interactivo de los 66 lotes
+        sobre Mapbox. 13 variables seleccionables. Panel lateral con detalle del lote al hacer clic.</p>
+      </div>
+      <div class="card">
+        <h4>2. Perfil espectral</h4>
+        <p style="font-size:13px; color:var(--muted);">Visualización de los 426 bandas para
+        hasta 5 lotes seleccionables. Regiones espectrales y bandas H₂O marcadas.</p>
+      </div>
+      <div class="card">
+        <h4>3. Bioquímica por lote</h4>
+        <p style="font-size:13px; color:var(--muted);">Radar chart individual vs media de escena.
+        Heatmap completo 66×6. Tabla filtrable y ordenable.</p>
+      </div>
+      <div class="card">
+        <h4>4. PCA / Zonas de manejo</h4>
+        <p style="font-size:13px; color:var(--muted);">Biplot interactivo PC1 vs PC2, coloreable
+        por zona, NDRE o Cab. Mapa de clustering espacial.</p>
+      </div>
+      <div class="card">
+        <h4>5. PLSR / VIP scores</h4>
+        <p style="font-size:13px; color:var(--muted);">Gráfico de VIP scores por variable con
+        umbral VIP=1.0. Top 5 bandas anotadas. Figura observado vs predicho.</p>
+      </div>
+      <div class="card">
+        <h4>6. Análisis espacial</h4>
+        <p style="font-size:13px; color:var(--muted);">Gradiente N foliar REIP continuo 30m.
+        Heterogeneidad intra-lote. RGB + lotes. Mapa PLSR píxel a píxel.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  CONCLUSIONES                                                      -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="conclusiones">
+  <div class="container">
+    <div class="section-label">// 10 · Conclusiones</div>
+    <h2>Conclusiones y aportes del análisis</h2>
+    <p class="lead">
+      Tanager-1 permite caracterizar el estado fisiológico de cultivos con un nivel de detalle
+      sin precedentes desde el espacio, identificando variables bioquímicas que ningún sensor
+      multiespectral convencional puede estimar de forma directa.
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <div class="card card-accent" style="margin-bottom:16px;">
+          <h4>1. El SWIR supera al red-edge como discriminador entre lotes</h4>
+          <p style="font-size:13px; color:var(--muted);">El PCA muestra que la variación entre las 66
+          parcelas está dominada por agua foliar (SWIR-1, 64.2%) y composición química N/lignina
+          (SWIR-2, 23.8%). El red-edge (clorofila) es homogéneo entre lotes — las parcelas difieren
+          en cuánta agua y nitrógeno acumulan, no en cuánta clorofila tienen.</p>
+        </div>
+        <div class="card card-green" style="margin-bottom:16px;">
+          <h4>2. PLSR demuestra que el espectro completo predice bioquímica con alta consistencia</h4>
+          <p style="font-size:13px; color:var(--muted);">R² LOO-CV &gt; 0.93 para todas las variables
+          con n=66 lotes y 426 bandas. Valida el enfoque hiperespectral completo vs índices simples
+          para estimación cuantitativa de variables bioquímicas.</p>
+        </div>
+        <div class="card card-purple">
+          <h4>3. Dos zonas de manejo con separación estadísticamente sólida</h4>
+          <p style="font-size:13px; color:var(--muted);">k-means con silhouette=0.636 identifica 2 zonas.
+          Los 4 lotes atípicos (A59, A61, A62, A65) representan ≈6% de la escena pero requieren
+          atención diferenciada. La heterogeneidad intra-lote de A20/A22 señala manejo variable urgente.</p>
+        </div>
+      </div>
+      <div>
+        <div class="card card-orange" style="margin-bottom:16px;">
+          <h4>4. PRI confirma funcionamiento fotosintético activo sin estrés generalizado</h4>
+          <p style="font-size:13px; color:var(--muted);">PRI=-0.067 en promedio confirma eficiencia
+          fotosintética normal. La capacidad de medir funcionamiento fisiológico (no solo estructura)
+          es exclusiva de sensores hiperespectrales — imposible con satélites multiespectrales como S2.</p>
+        </div>
+        <div class="card" style="margin-bottom:16px;">
+          <h4>5. REIP como mejor proxy de N foliar a 30m de resolución</h4>
+          <p style="font-size:13px; color:var(--muted);">σ=2.97 nm entre lotes demuestra que el
+          desplazamiento del punto de inflexión del red-edge discrimina diferencias sutiles de N
+          foliar no detectables con NDRE ni índices NIR.</p>
+        </div>
+        <div class="card">
+          <h4>6. Metodología replicable en cultivos panameños</h4>
+          <p style="font-size:13px; color:var(--muted);">El pipeline completo (Block 00–14 + Dashboard)
+          es independiente del tipo de cultivo. Su aplicación sobre imágenes equivalentes de arroz
+          en Panamá es el objetivo futuro declarado de este trabajo, con énfasis en validación
+          agronómica y transferencia a agricultura tropical.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:40px; margin-bottom:16px;">Síntesis de resultados cuantitativos</h3>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr><th>Métrica</th><th>Valor</th><th>Significado</th></tr>
+        </thead>
+        <tbody>
+          <tr><td>NDVI medio escena</td><td><span class="badge badge-green">0.895</span></td><td>Canopeo denso activo</td></tr>
+          <tr><td>NDRE medio escena</td><td><span class="badge badge-blue">0.64</span></td><td>≈40–60 µg/cm² Cab</td></tr>
+          <tr><td>Cab estimada por lote</td><td><span class="badge badge-blue">26–51 µg/cm²</span></td><td>Rango plausible sin campo</td></tr>
+          <tr><td>WBI medio</td><td><span class="badge badge-green">1.10</span></td><td>Sin estrés hídrico (umbral &lt;0.98)</td></tr>
+          <tr><td>PRI medio</td><td><span class="badge badge-green">-0.067</span></td><td>Fotosíntesis activa</td></tr>
+          <tr><td>REIP medio</td><td><span class="badge badge-blue">723 nm (σ=2.97)</span></td><td>Mejor discriminador N</td></tr>
+          <tr><td>R² PLSR LOO-CV</td><td><span class="badge badge-green">&gt;0.93 (6 variables)</span></td><td>Alta consistencia espectral</td></tr>
+          <tr><td>Varianza PCA (3 PCs)</td><td><span class="badge badge-green">96.9%</span></td><td>3 PCs suficientes</td></tr>
+          <tr><td>Silhouette clustering</td><td><span class="badge badge-green">0.636 (k=2)</span></td><td>Separación muy fuerte</td></tr>
+          <tr><td>Correlación empírico/PLSR</td><td><span class="badge badge-green">r &gt;0.97 (Biomasa/Estrés)</span></td><td>Coherencia metodológica</td></tr>
+          <tr><td>Lotes atípicos (Zona B)</td><td><span class="badge badge-red">4 (A59, A61, A62, A65)</span></td><td>Inspección prioritaria</td></tr>
+          <tr><td>Lotes doble alerta</td><td><span class="badge badge-orange">A20, A22</span></td><td>Heterogéneos + N bajo</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  FUENTES                                                           -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<section id="fuentes">
+  <div class="container">
+    <div class="section-label">// 11 · Fuentes y Referencias</div>
+    <h2>Bibliografía y recursos utilizados</h2>
+    <p class="lead">
+      Las estimaciones bioquímicas y la selección de índices se basan en literatura peer-reviewed
+      de teledetección hiperespectral agrícola y fisiología vegetal.
+    </p>
+
+    <div class="grid-2">
+      <div>
+        <h3 style="margin-bottom:12px;">Literatura principal — índices</h3>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Gitelson et al. (2003)</h4>
+          <p style="font-size:13px; color:var(--muted);">Relationships between leaf chlorophyll content and spectral reflectance.
+          Base para CIre y estimación cuantitativa de Cab desde red-edge.
+          <em>Remote Sensing of Environment</em>, 85(3), 271–280.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Clevers & Gitelson (2013)</h4>
+          <p style="font-size:13px; color:var(--muted);">Remote estimation of crop and grass chlorophyll and nitrogen content.
+          Ecuaciones CIre para estimación de N foliar. <em>ISPRS Journal of Photogrammetry</em>, 85, 1–18.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Gamon, Peñuelas & Field (1992)</h4>
+          <p style="font-size:13px; color:var(--muted);">A narrow-waveband spectral index that tracks diurnal changes in
+          photosynthetic efficiency. Definición y fundamento del índice PRI. <em>Remote Sensing of Environment</em>, 41, 35–44.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Dash & Curran (2004)</h4>
+          <p style="font-size:13px; color:var(--muted);">The MERIS terrestrial chlorophyll index (MTCI) — Red-edge
+          Inflection Point como proxy de N foliar y clorofila.
+          <em>International Journal of Remote Sensing</em>, 25(23), 5403–5413.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Peñuelas et al. (1994–1997)</h4>
+          <p style="font-size:13px; color:var(--muted);">The reflectance at the 950–970 nm region (WBI), NDWI y SIPI.
+          Índices de estrés hídrico y carotenoides. Series de publicaciones en
+          <em>Remote Sensing of Environment</em>.</p>
+        </div>
+        <div class="card">
+          <h4>Haboudane et al. (2002)</h4>
+          <p style="font-size:13px; color:var(--muted);">Integrated Narrow-Band Vegetation Indices for Prediction of
+          Crop Chlorophyll Content — TCARI/OSAVI ratio. <em>Remote Sensing of Environment</em>, 81, 416–426.</p>
+        </div>
+      </div>
+
+      <div>
+        <h3 style="margin-bottom:12px;">Literatura adicional</h3>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Datt (1999)</h4>
+          <p style="font-size:13px; color:var(--muted);">A new reflectance index for remote sensing of chlorophyll content in
+          higher plants. Índice Datt1: (R850−R710)/(R850−R680). <em>Journal of Plant Physiology</em>, 154, 30–36.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Baret & Guyot (1991)</h4>
+          <p style="font-size:13px; color:var(--muted);">Potentials and limits of vegetation indices for LAI and APAR assessment.
+          Fundamento NDVI/OSAVI para estimación de biomasa.
+          <em>Remote Sensing of Environment</em>, 35, 161–173.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Sims & Gamon (2002)</h4>
+          <p style="font-size:13px; color:var(--muted);">Relationships between leaf pigment content and spectral reflectance.
+          SIPI para carotenoides y estrés oxidativo.
+          <em>Remote Sensing of Environment</em>, 81, 337–354.</p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>Planet Labs (2025)</h4>
+          <p style="font-size:13px; color:var(--muted);">Tanager Open Data Competition — documentación técnica del producto
+          ortho_sr HDF5. Estructura HDFEOS, atributos wavelengths, unidades, datasets disponibles.
+          <a href="https://www.planet.com" target="_blank">planet.com</a></p>
+        </div>
+        <div class="card" style="margin-bottom:12px;">
+          <h4>PRISMA paper de referencia (2024)</h4>
+          <p style="font-size:13px; color:var(--muted);">Artículo de referencia sobre análisis hiperespectral PRISMA
+          para estimación de variables bioquímicas. Validación del rango SWIR-2 (1977–2474 nm) como
+          región clave para N y lignina — consistente con PC2 de este trabajo.
+          <em>s11119-024-10159-4</em></p>
+        </div>
+        <div class="card">
+          <h4>Vélez et al. (2024) — Frontiers in Plant Science</h4>
+          <p style="font-size:13px; color:var(--muted);">mNDVI705 como mejor estimador de clorofila en arroz,
+          superando a NDVI. Modelos ML sobre espectros completos superiores a índices lineales.
+          Referencia para metodología PLSR y selección de índices.</p>
+        </div>
+      </div>
+    </div>
+
+    <h3 style="margin-top:32px; margin-bottom:12px;">Datos abiertos utilizados</h3>
+    <div class="card card-accent">
+      <p style="font-size:13px; color:var(--muted);">
+        Todos los datos de entrada son de acceso abierto en el marco de la
+        <strong>Tanager Open Data Competition</strong> de Planet Labs (2025).
+        El dataset incluye: imagen SR HDF5 ortorectificada, UDM, visual TIF,
+        geolocation array y shapefile de lotes test (66 parcelas A1–A66).
+        Licencia: uso para investigación y competencia abierta.
+      </p>
+    </div>
+  </div>
+</section>
+
+
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<!--  FOOTER / AUTOR                                                    -->
+<!-- ══════════════════════════════════════════════════════════════════ -->
+<footer>
+  <div class="container" style="max-width:1100px; margin:0 auto;">
+    <div class="footer-name">Manuel Ramos</div>
+    <p style="margin-bottom:4px;">Investigador en Teledetección Hiperespectral e Inteligencia Artificial Aplicada</p>
+    <p style="margin-bottom:4px;">Investigador independiente · República de Panamá</p>
+    <p style="margin-bottom:24px; color:#444c56;">Tanager-1 Open Data Competition · Planet Labs · 2025</p>
+    <hr style="border-color: var(--border); max-width:400px; margin: 0 auto 24px;">
+    <p style="font-size:12px;">
+      Dashboard interactivo:
+      <a href="https://github.com/AizPask13/Tanager1_Lab_MR" target="_blank">github.com/AizPask13/Tanager1_Lab_MR</a>
+      &nbsp;·&nbsp; Desplegado en Render.com
+    </p>
+    <p style="font-size:12px; margin-top:8px; color:#444c56;">
+      Pipeline: Tanager-1 SR HDF5 → 15 bloques análisis → 12 GeoTIFFs + 9 CSVs + 16 figuras → Dashboard 6 tabs
+    </p>
+  </div>
+</footer>
+
+</body>
+</html>
